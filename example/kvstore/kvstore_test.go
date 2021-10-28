@@ -3,7 +3,7 @@ package kvstore
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"sort"
 	"testing"
 
@@ -72,7 +72,7 @@ func TestKVStoreKV(t *testing.T) {
 }
 
 func TestPersistentKVStoreKV(t *testing.T) {
-	dir, err := ioutil.TempDir("/tmp", "acei-kvstore-test") // TODO
+	dir, err := os.MkdirTemp("/tmp", "acei-kvstore-test") // TODO
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestPersistentKVStoreKV(t *testing.T) {
 }
 
 func TestPersistentKVStoreInfo(t *testing.T) {
-	dir, err := ioutil.TempDir("/tmp", "acei-kvstore-test") // TODO
+	dir, err := os.MkdirTemp("/tmp", "acei-kvstore-test") // TODO
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func TestPersistentKVStoreInfo(t *testing.T) {
 
 // add a validator, remove a validator, update a validator
 func TestValUpdates(t *testing.T) {
-	dir, err := ioutil.TempDir("/tmp", "acei-kvstore-test") // TODO
+	dir, err := os.MkdirTemp("/tmp", "acei-kvstore-test") // TODO
 	if err != nil {
 		t.Fatal(err)
 	}
