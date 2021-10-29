@@ -4,7 +4,7 @@ import (
 	"io"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/tendermint/tendermint/internal/libs/protoio"
+	"github.com/libp2p/go-msgio/protoio"
 )
 
 const (
@@ -14,14 +14,12 @@ const (
 // WriteMessage writes a varint length-delimited protobuf message.
 func WriteMessage(msg proto.Message, w io.Writer) error {
 	protoWriter := protoio.NewDelimitedWriter(w)
-	_, err := protoWriter.WriteMsg(msg)
-	return err
+	return protoWriter.WriteMsg(msg)
 }
 
 // ReadMessage reads a varint length-delimited protobuf message.
 func ReadMessage(r io.Reader, msg proto.Message) error {
-	_, err := protoio.NewDelimitedReader(r, maxMsgSize).ReadMsg(msg)
-	return err
+	return protoio.NewDelimitedReader(r, maxMsgSize).ReadMsg(msg)
 }
 
 //----------------------------------------
@@ -68,9 +66,9 @@ func ToRequestQuery(req RequestQuery) *Request {
 	}
 }
 
-func ToRequestInitChain(req RequestInitChain) *Request {
+func ToRequestInitLedger(req RequestInitLedger) *Request {
 	return &Request{
-		Value: &Request_InitChain{&req},
+		Value: &Request_InitLedger{&req},
 	}
 }
 
@@ -159,9 +157,9 @@ func ToResponseQuery(res ResponseQuery) *Response {
 	}
 }
 
-func ToResponseInitChain(res ResponseInitChain) *Response {
+func ToResponseInitLedger(res ResponseInitLedger) *Response {
 	return &Response{
-		Value: &Response_InitChain{&res},
+		Value: &Response_InitLedger{&res},
 	}
 }
 

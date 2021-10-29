@@ -5,7 +5,7 @@ import (
 )
 
 // Application is an interface that enables any finite, deterministic state machine
-// to be driven by a blockchain-based replication engine via the ABCI.
+// to be driven by a distributed-ledger-based replication engine via the ACEI.
 // All methods take a RequestXxx argument and return a ResponseXxx argument,
 // except CheckTx/DeliverTx, which take `tx []byte`, and `Commit`, which takes nothing.
 type Application interface {
@@ -17,7 +17,7 @@ type Application interface {
 	CheckTx(RequestCheckTx) ResponseCheckTx // Validate a tx for the mempool
 
 	// Consensus Connection
-	InitChain(RequestInitChain) ResponseInitChain    // Initialize blockchain w validators/other info from TendermintCore
+	InitLedger(RequestInitLedger) ResponseInitLedger // Initialize distributed ledger w/ validators/other info from the consensus engine
 	BeginBlock(RequestBeginBlock) ResponseBeginBlock // Signals the beginning of a block
 	DeliverTx(RequestDeliverTx) ResponseDeliverTx    // Deliver a tx for full processing
 	EndBlock(RequestEndBlock) ResponseEndBlock       // Signals the end of a block, returns changes to the validator set
@@ -62,8 +62,8 @@ func (BaseApplication) Query(req RequestQuery) ResponseQuery {
 	return ResponseQuery{Code: CodeTypeOK}
 }
 
-func (BaseApplication) InitChain(req RequestInitChain) ResponseInitChain {
-	return ResponseInitChain{}
+func (BaseApplication) InitLedger(req RequestInitLedger) ResponseInitLedger {
+	return ResponseInitLedger{}
 }
 
 func (BaseApplication) BeginBlock(req RequestBeginBlock) ResponseBeginBlock {
@@ -94,11 +94,15 @@ func (BaseApplication) ApplySnapshotChunk(req RequestApplySnapshotChunk) Respons
 
 // GRPCApplication is a GRPC wrapper for Application
 type GRPCApplication struct {
+	UnimplementedACEIApplicationServer
+
 	app Application
 }
 
+var _ = ACEIApplicationServer(&GRPCApplication{})
+
 func NewGRPCApplication(app Application) *GRPCApplication {
-	return &GRPCApplication{app}
+	return &GRPCApplication{app: app}
 }
 
 func (app *GRPCApplication) Echo(ctx context.Context, req *RequestEcho) (*ResponseEcho, error) {
@@ -134,8 +138,8 @@ func (app *GRPCApplication) Commit(ctx context.Context, req *RequestCommit) (*Re
 	return &res, nil
 }
 
-func (app *GRPCApplication) InitChain(ctx context.Context, req *RequestInitChain) (*ResponseInitChain, error) {
-	res := app.app.InitChain(*req)
+func (app *GRPCApplication) InitLedger(ctx context.Context, req *RequestInitLedger) (*ResponseInitLedger, error) {
+	res := app.app.InitLedger(*req)
 	return &res, nil
 }
 
