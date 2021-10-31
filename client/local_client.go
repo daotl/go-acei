@@ -1,11 +1,13 @@
-package abciclient
+package aceiclient
 
 import (
 	"context"
 
-	types "github.com/tendermint/tendermint/abci/types"
-	tmsync "github.com/tendermint/tendermint/internal/libs/sync"
-	"github.com/tendermint/tendermint/libs/service"
+	"github.com/daotl/go-log/v2"
+	ssrv "github.com/daotl/guts/service/suture"
+	gsync "github.com/daotl/guts/sync"
+
+	"github.com/daotl/go-acei/types"
 )
 
 // NOTE: use defer to unlock mutex because Application might panic (e.g., in
@@ -13,9 +15,9 @@ import (
 // methods like CheckTx (/broadcast_tx_* RPC endpoint) or Query (/abci_query
 // RPC endpoint), but defers are used everywhere for the sake of consistency.
 type localClient struct {
-	service.BaseService
+	*ssrv.BaseService
 
-	mtx *tmsync.Mutex
+	mtx *gsync.Mutex
 	types.Application
 	Callback
 }
@@ -26,16 +28,28 @@ var _ Client = (*localClient)(nil)
 // methods of the given app.
 //
 // Both Async and Sync methods ignore the given context.Context parameter.
-func NewLocalClient(mtx *tmsync.Mutex, app types.Application) Client {
+func NewLocalClient(mtx *gsync.Mutex, app types.Application, logger log.StandardLogger,
+) (*localClient, error) {
 	if mtx == nil {
-		mtx = new(tmsync.Mutex)
+		mtx = new(gsync.Mutex)
 	}
 	cli := &localClient{
 		mtx:         mtx,
 		Application: app,
 	}
-	cli.BaseService = *service.NewBaseService(nil, "localClient", cli)
-	return cli
+	var err error
+	cli.BaseService, err = ssrv.NewBaseService(cli.run, logger)
+	if err != nil {
+		return nil, err
+	}
+	return cli, nil
+}
+
+// Just a placeholder: localClient won't actually be used as a Suture service
+func (cli *localClient) run(ctx context.Context, ready func()) error {
+	ready()
+	<-ctx.Done()
+	return nil
 }
 
 func (app *localClient) SetResponseCallback(cb Callback) {
@@ -119,14 +133,14 @@ func (app *localClient) CommitAsync(ctx context.Context) (*ReqRes, error) {
 	), nil
 }
 
-func (app *localClient) InitChainAsync(ctx context.Context, req types.RequestInitChain) (*ReqRes, error) {
+func (app *localClient) InitLedgerAsync(ctx context.Context, req types.RequestInitLedger) (*ReqRes, error) {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	res := app.Application.InitChain(req)
+	res := app.Application.InitLedger(req)
 	return app.callback(
-		types.ToRequestInitChain(req),
-		types.ToResponseInitChain(res),
+		types.ToRequestInitLedger(req),
+		types.ToResponseInitLedger(res),
 	), nil
 }
 
@@ -262,15 +276,15 @@ func (app *localClient) CommitSync(ctx context.Context) (*types.ResponseCommit, 
 	return &res, nil
 }
 
-func (app *localClient) InitChainSync(
+func (app *localClient) InitLedgerSync(
 	ctx context.Context,
-	req types.RequestInitChain,
-) (*types.ResponseInitChain, error) {
+	req types.RequestInitLedger,
+) (*types.ResponseInitLedger, error) {
 
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	res := app.Application.InitChain(req)
+	res := app.Application.InitLedger(req)
 	return &res, nil
 }
 

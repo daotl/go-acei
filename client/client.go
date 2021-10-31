@@ -1,13 +1,15 @@
-package abciclient
+package aceiclient
 
 import (
 	"context"
 	"fmt"
 	"sync"
 
-	"github.com/tendermint/tendermint/abci/types"
-	tmsync "github.com/tendermint/tendermint/internal/libs/sync"
-	"github.com/tendermint/tendermint/libs/service"
+	"github.com/daotl/go-log/v2"
+	ssrv "github.com/daotl/guts/service/suture"
+	gsync "github.com/daotl/guts/sync"
+
+	"github.com/daotl/go-acei/types"
 )
 
 const (
@@ -17,16 +19,16 @@ const (
 
 //go:generate ../../scripts/mockery_generate.sh Client
 
-// Client defines an interface for an ABCI client.
+// Client defines an interface for an ACEI client.
 //
 // All `Async` methods return a `ReqRes` object and an error.
 // All `Sync` methods return the appropriate protobuf ResponseXxx struct and an error.
 //
-// NOTE these are client errors, eg. ABCI socket connectivity issues.
-// Application-related errors are reflected in response via ABCI error codes
+// NOTE these are client errors, eg. ACEI socket connectivity issues.
+// Application-related errors are reflected in response via ACEI error codes
 // and logs.
 type Client interface {
-	service.Service
+	ssrv.Service
 
 	SetResponseCallback(Callback)
 	Error() error
@@ -39,7 +41,7 @@ type Client interface {
 	CheckTxAsync(context.Context, types.RequestCheckTx) (*ReqRes, error)
 	QueryAsync(context.Context, types.RequestQuery) (*ReqRes, error)
 	CommitAsync(context.Context) (*ReqRes, error)
-	InitChainAsync(context.Context, types.RequestInitChain) (*ReqRes, error)
+	InitLedgerAsync(context.Context, types.RequestInitLedger) (*ReqRes, error)
 	BeginBlockAsync(context.Context, types.RequestBeginBlock) (*ReqRes, error)
 	EndBlockAsync(context.Context, types.RequestEndBlock) (*ReqRes, error)
 	ListSnapshotsAsync(context.Context, types.RequestListSnapshots) (*ReqRes, error)
@@ -55,7 +57,7 @@ type Client interface {
 	CheckTxSync(context.Context, types.RequestCheckTx) (*types.ResponseCheckTx, error)
 	QuerySync(context.Context, types.RequestQuery) (*types.ResponseQuery, error)
 	CommitSync(context.Context) (*types.ResponseCommit, error)
-	InitChainSync(context.Context, types.RequestInitChain) (*types.ResponseInitChain, error)
+	InitLedgerSync(context.Context, types.RequestInitLedger) (*types.ResponseInitLedger, error)
 	BeginBlockSync(context.Context, types.RequestBeginBlock) (*types.ResponseBeginBlock, error)
 	EndBlockSync(context.Context, types.RequestEndBlock) (*types.ResponseEndBlock, error)
 	ListSnapshotsSync(context.Context, types.RequestListSnapshots) (*types.ResponseListSnapshots, error)
@@ -66,14 +68,15 @@ type Client interface {
 
 //----------------------------------------
 
-// NewClient returns a new ABCI client of the specified transport type.
+// NewClient returns a new ACEI client of the specified transport type.
 // It returns an error if the transport is not "socket" or "grpc"
-func NewClient(addr, transport string, mustConnect bool) (client Client, err error) {
+func NewClient(addr, transport string, mustConnect bool, logger log.StandardLogger,
+) (client Client, err error) {
 	switch transport {
 	case "socket":
-		client = NewSocketClient(addr, mustConnect)
+		client, err = NewSocketClient(addr, mustConnect, logger)
 	case "grpc":
-		client = NewGRPCClient(addr, mustConnect)
+		client, err = NewGRPCClient(addr, mustConnect, logger)
 	default:
 		err = fmt.Errorf("unknown abci transport %s", transport)
 	}
@@ -87,7 +90,7 @@ type ReqRes struct {
 	*sync.WaitGroup
 	*types.Response // Not set atomically, so be sure to use WaitGroup.
 
-	mtx  tmsync.Mutex
+	mtx  gsync.Mutex
 	done bool                  // Gets set to true once *after* WaitGroup.Done().
 	cb   func(*types.Response) // A single callback that may be set.
 }

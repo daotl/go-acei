@@ -1,4 +1,4 @@
-package abciclient
+package aceiclient
 
 import (
 	"context"
@@ -9,22 +9,24 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/tendermint/tendermint/abci/types"
-	tmsync "github.com/tendermint/tendermint/internal/libs/sync"
-	tmnet "github.com/tendermint/tendermint/libs/net"
-	"github.com/tendermint/tendermint/libs/service"
+	"github.com/daotl/go-log/v2"
+	gnet "github.com/daotl/guts/net"
+	ssrv "github.com/daotl/guts/service/suture"
+	gsync "github.com/daotl/guts/sync"
+
+	"github.com/daotl/go-acei/types"
 )
 
 // A gRPC client.
 type grpcClient struct {
-	service.BaseService
+	*ssrv.BaseService
 	mustConnect bool
 
-	client   types.ABCIApplicationClient
+	client   types.ACEIApplicationClient
 	conn     *grpc.ClientConn
 	chReqRes chan *ReqRes // dispatches "async" responses to callbacks *in order*, needed by mempool
 
-	mtx   tmsync.Mutex
+	mtx   gsync.Mutex
 	addr  string
 	err   error
 	resCb func(*types.Request, *types.Response) // listens to all callbacks
@@ -42,27 +44,39 @@ var _ Client = (*grpcClient)(nil)
 // which is expensive, but easy - if you want something better, use the socket
 // protocol! maybe one day, if people really want it, we use grpc streams, but
 // hopefully not :D
-func NewGRPCClient(addr string, mustConnect bool) Client {
+func NewGRPCClient(addr string, mustConnect bool, logger log.StandardLogger,
+) (*grpcClient, error) {
 	cli := &grpcClient{
 		addr:        addr,
 		mustConnect: mustConnect,
-		// Buffering the channel is needed to make calls appear asynchronous,
-		// which is required when the caller makes multiple async calls before
-		// processing callbacks (e.g. due to holding locks). 64 means that a
-		// caller can make up to 64 async calls before a callback must be
-		// processed (otherwise it deadlocks). It also means that we can make 64
-		// gRPC calls while processing a slow callback at the channel head.
-		chReqRes: make(chan *ReqRes, 64),
 	}
-	cli.BaseService = *service.NewBaseService(nil, "grpcClient", cli)
-	return cli
+	var err error
+	cli.BaseService, err = ssrv.NewBaseService(cli.run, logger)
+	if err != nil {
+		return nil, err
+	}
+	return cli, nil
 }
 
 func dialerFunc(ctx context.Context, addr string) (net.Conn, error) {
-	return tmnet.Connect(addr)
+	return gnet.Connect(addr)
 }
 
-func (cli *grpcClient) OnStart() error {
+// func (cli *grpcClient) OnStart() error {
+func (cli *grpcClient) run(ctx context.Context, ready func()) error {
+	// Reset state
+	cli.client = nil
+	cli.conn = nil
+	// Buffering the channel is needed to make calls appear asynchronous,
+	// which is required when the caller makes multiple async calls before
+	// processing callbacks (e.g. due to holding locks). 64 means that a
+	// caller can make up to 64 async calls before a callback must be
+	// processed (otherwise it deadlocks). It also means that we can make 64
+	// gRPC calls while processing a slow callback at the channel head.
+	cli.chReqRes = make(chan *ReqRes, 64)
+	cli.err = nil
+	//cli.resCb = nil // Keep response callback
+
 	// This processes asynchronous request/response messages and dispatches
 	// them to callbacks.
 	go func() {
@@ -93,59 +107,81 @@ func (cli *grpcClient) OnStart() error {
 		}
 	}()
 
-RETRY_LOOP:
+	var (
+		err  error // error to return
+		conn *grpc.ClientConn
+	)
+
+RETRY_CONNECT_LOOP:
 	for {
-		conn, err := grpc.Dial(cli.addr, grpc.WithInsecure(), grpc.WithContextDialer(dialerFunc))
-		if err != nil {
+		select {
+		case <-ctx.Done():
+			goto CLEANUP
+
+		default:
+			conn, err = grpc.Dial(cli.addr, grpc.WithInsecure(), grpc.WithContextDialer(dialerFunc))
+			// Success, break
+			if err == nil {
+				break RETRY_CONNECT_LOOP
+			}
+			// Fail, stop or retry
 			if cli.mustConnect {
-				return err
+				goto CLEANUP
 			}
 			cli.Logger.Error(fmt.Sprintf("abci.grpcClient failed to connect to %v.  Retrying...\n", cli.addr), "err", err)
 			time.Sleep(time.Second * dialRetryIntervalSeconds)
-			continue RETRY_LOOP
 		}
+	}
 
-		cli.Logger.Info("Dialed server. Waiting for echo.", "addr", cli.addr)
-		client := types.NewABCIApplicationClient(conn)
-		cli.conn = conn
+	cli.Logger.Info("Dialed server. Waiting for echo.", "addr", cli.addr)
+	cli.client = types.NewACEIApplicationClient(conn)
+	cli.conn = conn
 
-	ENSURE_CONNECTED:
-		for {
-			_, err := client.Echo(context.Background(), &types.RequestEcho{Message: "hello"}, grpc.WaitForReady(true))
+ENSURE_CONNECTED:
+	for {
+		select {
+		case <-ctx.Done():
+			goto CLEANUP
+
+		default:
+			_, err := cli.client.Echo(context.Background(), &types.RequestEcho{Message: "hello"}, grpc.WaitForReady(true))
+			// Success, break
 			if err == nil {
 				break ENSURE_CONNECTED
 			}
+			// Fail, retry
 			cli.Logger.Error("Echo failed", "err", err)
 			time.Sleep(time.Second * echoRetryIntervalSeconds)
 		}
-
-		cli.client = client
-		return nil
 	}
-}
 
-func (cli *grpcClient) OnStop() {
+	ready()
+	// Block until stopped
+	<-ctx.Done()
+
+CLEANUP:
+	// func (cli *grpcClient) OnStop() {
 	if cli.conn != nil {
 		cli.conn.Close()
 	}
 	close(cli.chReqRes)
+	return err
 }
 
-func (cli *grpcClient) StopForError(err error) {
-	if !cli.IsRunning() {
+func (cli *grpcClient) StopForError(cerr error) {
+	stopped, err := cli.Stop()
+	if err != nil {
 		return
 	}
 
 	cli.mtx.Lock()
 	if cli.err == nil {
-		cli.err = err
+		cli.err = cerr
 	}
 	cli.mtx.Unlock()
 
 	cli.Logger.Error(fmt.Sprintf("Stopping abci.grpcClient for error: %v", err.Error()))
-	if err := cli.Stop(); err != nil {
-		cli.Logger.Error("Error stopping abci.grpcClient", "err", err)
-	}
+	<-stopped
 }
 
 func (cli *grpcClient) Error() error {
@@ -235,13 +271,13 @@ func (cli *grpcClient) CommitAsync(ctx context.Context) (*ReqRes, error) {
 }
 
 // NOTE: call is synchronous, use ctx to break early if needed
-func (cli *grpcClient) InitChainAsync(ctx context.Context, params types.RequestInitChain) (*ReqRes, error) {
-	req := types.ToRequestInitChain(params)
-	res, err := cli.client.InitChain(ctx, req.GetInitChain(), grpc.WaitForReady(true))
+func (cli *grpcClient) InitLedgerAsync(ctx context.Context, params types.RequestInitLedger) (*ReqRes, error) {
+	req := types.ToRequestInitLedger(params)
+	res, err := cli.client.InitLedger(ctx, req.GetInitLedger(), grpc.WaitForReady(true))
 	if err != nil {
 		return nil, err
 	}
-	return cli.finishAsyncCall(ctx, req, &types.Response{Value: &types.Response_InitChain{InitChain: res}})
+	return cli.finishAsyncCall(ctx, req, &types.Response{Value: &types.Response_InitLedger{InitLedger: res}})
 }
 
 // NOTE: call is synchronous, use ctx to break early if needed
@@ -423,16 +459,16 @@ func (cli *grpcClient) CommitSync(ctx context.Context) (*types.ResponseCommit, e
 	return cli.finishSyncCall(reqres).GetCommit(), cli.Error()
 }
 
-func (cli *grpcClient) InitChainSync(
+func (cli *grpcClient) InitLedgerSync(
 	ctx context.Context,
-	params types.RequestInitChain,
-) (*types.ResponseInitChain, error) {
+	params types.RequestInitLedger,
+) (*types.ResponseInitLedger, error) {
 
-	reqres, err := cli.InitChainAsync(ctx, params)
+	reqres, err := cli.InitLedgerAsync(ctx, params)
 	if err != nil {
 		return nil, err
 	}
-	return cli.finishSyncCall(reqres).GetInitChain(), cli.Error()
+	return cli.finishSyncCall(reqres).GetInitLedger(), cli.Error()
 }
 
 func (cli *grpcClient) BeginBlockSync(

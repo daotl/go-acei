@@ -1,42 +1,51 @@
 package server
 
 import (
+	"context"
 	"net"
 
 	"google.golang.org/grpc"
 
-	"github.com/tendermint/tendermint/abci/types"
-	tmnet "github.com/tendermint/tendermint/libs/net"
-	"github.com/tendermint/tendermint/libs/service"
+	"github.com/daotl/go-log/v2"
+	gnet "github.com/daotl/guts/net"
+	ssrv "github.com/daotl/guts/service/suture"
+
+	"github.com/daotl/go-acei/types"
 )
 
 type GRPCServer struct {
-	service.BaseService
+	*ssrv.BaseService
 
 	proto    string
 	addr     string
 	listener net.Listener
 	server   *grpc.Server
 
-	app types.ABCIApplicationServer
+	app types.ACEIApplicationServer
 }
 
 // NewGRPCServer returns a new gRPC ABCI server
-func NewGRPCServer(protoAddr string, app types.ABCIApplicationServer) service.Service {
-	proto, addr := tmnet.ProtocolAndAddress(protoAddr)
+func NewGRPCServer(protoAddr string, app types.ACEIApplicationServer, logger log.StandardLogger,
+) (ssrv.Service, error) {
+	proto, addr := gnet.ProtocolAndAddress(protoAddr)
 	s := &GRPCServer{
-		proto:    proto,
-		addr:     addr,
-		listener: nil,
-		app:      app,
+		proto: proto,
+		addr:  addr,
+		app:   app,
 	}
-	s.BaseService = *service.NewBaseService(nil, "ABCIServer", s)
-	return s
+	var err error
+	s.BaseService, err = ssrv.NewBaseService(s.run, logger)
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 // OnStart starts the gRPC service.
-func (s *GRPCServer) OnStart() error {
+//func (s *GRPCServer) OnStart() error {
+func (s *GRPCServer) run(ctx context.Context, ready func()) error {
 
+	s.listener = nil
 	ln, err := net.Listen(s.proto, s.addr)
 	if err != nil {
 		return err
@@ -44,18 +53,16 @@ func (s *GRPCServer) OnStart() error {
 
 	s.listener = ln
 	s.server = grpc.NewServer()
-	types.RegisterABCIApplicationServer(s.server, s.app)
+	types.RegisterACEIApplicationServer(s.server, s.app)
 
+	ready()
 	s.Logger.Info("Listening", "proto", s.proto, "addr", s.addr)
-	go func() {
-		if err := s.server.Serve(s.listener); err != nil {
-			s.Logger.Error("Error serving gRPC server", "err", err)
-		}
-	}()
-	return nil
-}
+	if err := s.server.Serve(s.listener); err != nil {
+		s.Logger.Error("Error serving gRPC server", "err", err)
+	}
 
-// OnStop stops the gRPC server.
-func (s *GRPCServer) OnStop() {
+	// OnStop stops the gRPC server.
+	//func (s *GRPCServer) OnStop() {
 	s.server.Stop()
+	return nil
 }

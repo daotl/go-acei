@@ -1,4 +1,4 @@
-package abciclient
+package aceiclient
 
 import (
 	"bufio"
@@ -11,10 +11,12 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/tendermint/tendermint/abci/types"
-	tmsync "github.com/tendermint/tendermint/internal/libs/sync"
-	tmnet "github.com/tendermint/tendermint/libs/net"
-	"github.com/tendermint/tendermint/libs/service"
+	"github.com/daotl/go-log/v2"
+	gnet "github.com/daotl/guts/net"
+	ssrv "github.com/daotl/guts/service/suture"
+	gsync "github.com/daotl/guts/sync"
+
+	"github.com/daotl/go-acei/types"
 )
 
 const (
@@ -31,7 +33,7 @@ type reqResWithContext struct {
 // This is goroutine-safe, but users should beware that the application in
 // general is not meant to be interfaced with concurrent callers.
 type socketClient struct {
-	service.BaseService
+	*ssrv.BaseService
 
 	addr        string
 	mustConnect bool
@@ -39,7 +41,7 @@ type socketClient struct {
 
 	reqQueue chan *reqResWithContext
 
-	mtx     tmsync.Mutex
+	mtx     gsync.Mutex
 	err     error
 	reqSent *list.List                            // list of requests sent, waiting for response
 	resCb   func(*types.Request, *types.Response) // called on all requests, if set.
@@ -50,54 +52,75 @@ var _ Client = (*socketClient)(nil)
 // NewSocketClient creates a new socket client, which connects to a given
 // address. If mustConnect is true, the client will return an error upon start
 // if it fails to connect.
-func NewSocketClient(addr string, mustConnect bool) Client {
+func NewSocketClient(addr string, mustConnect bool, logger log.StandardLogger,
+) (*socketClient, error) {
 	cli := &socketClient{
-		reqQueue:    make(chan *reqResWithContext, reqQueueSize),
 		mustConnect: mustConnect,
-
-		addr:    addr,
-		reqSent: list.New(),
-		resCb:   nil,
+		addr:        addr,
+		resCb:       nil,
 	}
-	cli.BaseService = *service.NewBaseService(nil, "socketClient", cli)
-	return cli
+	var err error
+	cli.BaseService, err = ssrv.NewBaseService(cli.run, logger)
+	if err != nil {
+		return nil, err
+	}
+	return cli, nil
 }
 
-// OnStart implements Service by connecting to the server and spawning reading
-// and writing goroutines.
-func (cli *socketClient) OnStart() error {
+//func (cli *socketClient) OnStart() error {
+func (cli *socketClient) run(ctx context.Context, ready func()) error {
+	// Reset state
+	cli.conn = nil
+	cli.reqQueue = make(chan *reqResWithContext, reqQueueSize)
+	cli.err = nil
+	cli.reqSent = list.New()
+	//cli.resCb = nil // Keep response callback
+
 	var (
-		err  error
+		err  error // error to return
 		conn net.Conn
 	)
 
+RETRY_CONNECT_LOOP:
 	for {
-		conn, err = tmnet.Connect(cli.addr)
-		if err != nil {
-			if cli.mustConnect {
-				return err
+		select {
+		case <-ctx.Done():
+			goto CLEANUP
+
+		default:
+			conn, err = gnet.Connect(cli.addr)
+			// Success, break
+			if err == nil {
+				break RETRY_CONNECT_LOOP
 			}
-			cli.Logger.Error(fmt.Sprintf("abci.socketClient failed to connect to %v.  Retrying after %vs...",
+			// Fail, stop or retry
+			if cli.mustConnect {
+				goto CLEANUP
+			}
+			cli.Logger.Error(fmt.Sprintf("abci.socketClient failed to connect to %v.  "+
+				"Retrying after %vs...",
 				cli.addr, dialRetryIntervalSeconds), "err", err)
 			time.Sleep(time.Second * dialRetryIntervalSeconds)
-			continue
 		}
-		cli.conn = conn
-
-		go cli.sendRequestsRoutine(conn)
-		go cli.recvResponseRoutine(conn)
-
-		return nil
 	}
-}
 
-// OnStop implements Service by closing connection and flushing all queues.
-func (cli *socketClient) OnStop() {
+	cli.conn = conn
+
+	go cli.sendRequestsRoutine(ctx, conn)
+	go cli.recvResponseRoutine(conn)
+
+	ready()
+	// Block until stopped
+	<-ctx.Done()
+
+CLEANUP:
+	// OnStop implements Service by closing connection and flushing all queues.
+	//func (cli *socketClient) OnStop() {
 	if cli.conn != nil {
 		cli.conn.Close()
 	}
-
 	cli.drainQueue()
+	return nil
 }
 
 // Error returns an error if the client was stopped abruptly.
@@ -119,7 +142,7 @@ func (cli *socketClient) SetResponseCallback(resCb Callback) {
 
 //----------------------------------------
 
-func (cli *socketClient) sendRequestsRoutine(conn io.Writer) {
+func (cli *socketClient) sendRequestsRoutine(ctx context.Context, conn io.Writer) {
 	bw := bufio.NewWriter(conn)
 	for {
 		select {
@@ -139,7 +162,7 @@ func (cli *socketClient) sendRequestsRoutine(conn io.Writer) {
 				return
 			}
 
-		case <-cli.Quit():
+		case <-ctx.Done():
 			return
 		}
 	}
@@ -242,8 +265,8 @@ func (cli *socketClient) CommitAsync(ctx context.Context) (*ReqRes, error) {
 	return cli.queueRequestAsync(ctx, types.ToRequestCommit())
 }
 
-func (cli *socketClient) InitChainAsync(ctx context.Context, req types.RequestInitChain) (*ReqRes, error) {
-	return cli.queueRequestAsync(ctx, types.ToRequestInitChain(req))
+func (cli *socketClient) InitLedgerAsync(ctx context.Context, req types.RequestInitLedger) (*ReqRes, error) {
+	return cli.queueRequestAsync(ctx, types.ToRequestInitLedger(req))
 }
 
 func (cli *socketClient) BeginBlockAsync(ctx context.Context, req types.RequestBeginBlock) (*ReqRes, error) {
@@ -364,16 +387,16 @@ func (cli *socketClient) CommitSync(ctx context.Context) (*types.ResponseCommit,
 	return reqres.Response.GetCommit(), nil
 }
 
-func (cli *socketClient) InitChainSync(
+func (cli *socketClient) InitLedgerSync(
 	ctx context.Context,
-	req types.RequestInitChain,
-) (*types.ResponseInitChain, error) {
+	req types.RequestInitLedger,
+) (*types.ResponseInitLedger, error) {
 
-	reqres, err := cli.queueRequestAndFlushSync(ctx, types.ToRequestInitChain(req))
+	reqres, err := cli.queueRequestAndFlushSync(ctx, types.ToRequestInitLedger(req))
 	if err != nil {
 		return nil, err
 	}
-	return reqres.Response.GetInitChain(), nil
+	return reqres.Response.GetInitLedger(), nil
 }
 
 func (cli *socketClient) BeginBlockSync(
@@ -555,8 +578,8 @@ func resMatchesReq(req *types.Request, res *types.Response) (ok bool) {
 		_, ok = res.Value.(*types.Response_Commit)
 	case *types.Request_Query:
 		_, ok = res.Value.(*types.Response_Query)
-	case *types.Request_InitChain:
-		_, ok = res.Value.(*types.Response_InitChain)
+	case *types.Request_InitLedger:
+		_, ok = res.Value.(*types.Response_InitLedger)
 	case *types.Request_BeginBlock:
 		_, ok = res.Value.(*types.Response_BeginBlock)
 	case *types.Request_EndBlock:
@@ -573,17 +596,16 @@ func resMatchesReq(req *types.Request, res *types.Response) (ok bool) {
 	return ok
 }
 
-func (cli *socketClient) stopForError(err error) {
-	if !cli.IsRunning() {
+func (cli *socketClient) stopForError(cerr error) {
+	stopped, err := cli.Stop()
+	if err != nil {
 		return
 	}
 
 	cli.mtx.Lock()
-	cli.err = err
+	cli.err = cerr
 	cli.mtx.Unlock()
 
 	cli.Logger.Info("Stopping abci.socketClient", "reason", err)
-	if err := cli.Stop(); err != nil {
-		cli.Logger.Error("Error stopping abci.socketClient", "err", err)
-	}
+	<-stopped
 }

@@ -1,20 +1,20 @@
-package abciclient_test
+package aceiclient_test
 
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"testing"
 	"time"
-
-	"math/rand"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	abciclient "github.com/tendermint/tendermint/abci/client"
-	"github.com/tendermint/tendermint/abci/server"
-	"github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/libs/service"
+	ssrv "github.com/daotl/guts/service/suture"
+
+	aceiclient "github.com/daotl/go-acei/client"
+	"github.com/daotl/go-acei/server"
+	"github.com/daotl/go-acei/types"
 )
 
 var ctx = context.Background()
@@ -24,13 +24,17 @@ func TestProperSyncCalls(t *testing.T) {
 
 	s, c := setupClientServer(t, app)
 	t.Cleanup(func() {
-		if err := s.Stop(); err != nil {
+		if stopped, err := s.Stop(); err != nil {
 			t.Error(err)
+		} else {
+			<-stopped
 		}
 	})
 	t.Cleanup(func() {
-		if err := c.Stop(); err != nil {
+		if stopped, err := c.Stop(); err != nil {
 			t.Error(err)
+		} else {
+			<-stopped
 		}
 	})
 
@@ -60,13 +64,17 @@ func TestHangingSyncCalls(t *testing.T) {
 
 	s, c := setupClientServer(t, app)
 	t.Cleanup(func() {
-		if err := s.Stop(); err != nil {
+		if stopped, err := s.Stop(); err != nil {
 			t.Log(err)
+		} else {
+			<-stopped
 		}
 	})
 	t.Cleanup(func() {
-		if err := c.Stop(); err != nil {
+		if stopped, err := c.Stop(); err != nil {
 			t.Log(err)
+		} else {
+			<-stopped
 		}
 	})
 
@@ -81,8 +89,9 @@ func TestHangingSyncCalls(t *testing.T) {
 		// no response yet from server
 		time.Sleep(20 * time.Millisecond)
 		// kill the server, so the connections break
-		err = s.Stop()
+		stopped, err := s.Stop()
 		assert.NoError(t, err)
+		<-stopped
 
 		// wait for the response from BeginBlock
 		reqres.Wait()
@@ -99,20 +108,27 @@ func TestHangingSyncCalls(t *testing.T) {
 	}
 }
 
-func setupClientServer(t *testing.T, app types.Application) (
-	service.Service, abciclient.Client) {
+func setupClientServer(t *testing.T, app types.Application,
+) (ssrv.Service, aceiclient.Client) {
 	// some port between 20k and 30k
 	port := 20000 + rand.Int31()%10000
 	addr := fmt.Sprintf("localhost:%d", port)
 
-	s, err := server.NewServer(addr, "socket", app)
+	s, err := server.NewServer(addr, "socket", app, nil)
 	require.NoError(t, err)
-	err = s.Start()
-	require.NoError(t, err)
+	go func() {
+		err = s.Serve(context.Background())
+		require.NoError(t, err)
+	}()
+	<-s.Ready()
 
-	c := abciclient.NewSocketClient(addr, true)
-	err = c.Start()
+	c, err := aceiclient.NewSocketClient(addr, true, nil)
 	require.NoError(t, err)
+	go func() {
+		err = c.Serve(context.Background())
+		require.NoError(t, err)
+	}()
+	<-c.Ready()
 
 	return s, c
 }

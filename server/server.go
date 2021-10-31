@@ -11,18 +11,21 @@ package server
 import (
 	"fmt"
 
-	"github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/libs/service"
+	"github.com/daotl/go-log/v2"
+	ssrv "github.com/daotl/guts/service/suture"
+
+	"github.com/daotl/go-acei/types"
 )
 
-func NewServer(protoAddr, transport string, app types.Application) (service.Service, error) {
-	var s service.Service
+func NewServer(protoAddr, transport string, app types.Application, logger log.StandardLogger,
+) (ssrv.Service, error) {
+	var s ssrv.Service
 	var err error
 	switch transport {
 	case "socket":
-		s = NewSocketServer(protoAddr, app)
+		s, err = NewSocketServer(protoAddr, app, logger)
 	case "grpc":
-		s = NewGRPCServer(protoAddr, types.NewGRPCApplication(app))
+		s, err = NewGRPCServer(protoAddr, types.NewGRPCApplication(app), logger)
 	default:
 		err = fmt.Errorf("unknown server type %s", transport)
 	}

@@ -2,68 +2,72 @@ package server
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"runtime"
 
-	"github.com/tendermint/tendermint/abci/types"
-	tmsync "github.com/tendermint/tendermint/internal/libs/sync"
-	tmlog "github.com/tendermint/tendermint/libs/log"
-	tmnet "github.com/tendermint/tendermint/libs/net"
-	"github.com/tendermint/tendermint/libs/service"
+	"github.com/daotl/go-log/v2"
+	gnet "github.com/daotl/guts/net"
+	ssrv "github.com/daotl/guts/service/suture"
+	gsync "github.com/daotl/guts/sync"
+
+	"github.com/daotl/go-acei/types"
 )
 
 // var maxNumberConnections = 2
 
 type SocketServer struct {
-	service.BaseService
-	isLoggerSet bool
+	*ssrv.BaseService
 
 	proto    string
 	addr     string
 	listener net.Listener
 
-	connsMtx   tmsync.Mutex
+	connsMtx   gsync.Mutex
 	conns      map[int]net.Conn
 	nextConnID int
 
-	appMtx tmsync.Mutex
+	appMtx gsync.Mutex
 	app    types.Application
 }
 
-func NewSocketServer(protoAddr string, app types.Application) service.Service {
-	proto, addr := tmnet.ProtocolAndAddress(protoAddr)
+func NewSocketServer(protoAddr string, app types.Application, logger log.StandardLogger,
+) (ssrv.Service, error) {
+	proto, addr := gnet.ProtocolAndAddress(protoAddr)
 	s := &SocketServer{
-		proto:    proto,
-		addr:     addr,
-		listener: nil,
-		app:      app,
-		conns:    make(map[int]net.Conn),
+		proto: proto,
+		addr:  addr,
+		app:   app,
 	}
-	s.BaseService = *service.NewBaseService(nil, "ABCIServer", s)
-	return s
+	var err error
+	s.BaseService, err = ssrv.NewBaseService(s.run, logger)
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
-func (s *SocketServer) SetLogger(l tmlog.Logger) {
-	s.BaseService.SetLogger(l)
-	s.isLoggerSet = true
-}
+//func (s *SocketServer) OnStart() error {
+func (s *SocketServer) run(ctx context.Context, ready func()) error {
+	// Reset
+	s.listener = nil
+	s.conns = make(map[int]net.Conn)
 
-func (s *SocketServer) OnStart() error {
 	ln, err := net.Listen(s.proto, s.addr)
 	if err != nil {
 		return err
 	}
 
 	s.listener = ln
-	go s.acceptConnectionsRoutine()
+	go s.acceptConnectionsRoutine(ctx)
 
-	return nil
-}
+	ready()
+	// Block until stopped
+	<-ctx.Done()
 
-func (s *SocketServer) OnStop() {
+	//func (s *SocketServer) OnStop() {
 	if err := s.listener.Close(); err != nil {
 		s.Logger.Error("Error closing listener", "err", err)
 	}
@@ -76,6 +80,7 @@ func (s *SocketServer) OnStop() {
 			s.Logger.Error("Error closing connection", "id", id, "conn", conn, "err", err)
 		}
 	}
+	return nil
 }
 
 func (s *SocketServer) addConn(conn net.Conn) int {
@@ -103,14 +108,16 @@ func (s *SocketServer) rmConn(connID int) error {
 	return conn.Close()
 }
 
-func (s *SocketServer) acceptConnectionsRoutine() {
+func (s *SocketServer) acceptConnectionsRoutine(ctx context.Context) {
 	for {
 		// Accept a connection
 		s.Logger.Info("Waiting for new connection...")
 		conn, err := s.listener.Accept()
 		if err != nil {
-			if !s.IsRunning() {
+			select {
+			case <-ctx.Done():
 				return // Ignore error from listener closing.
+			default:
 			}
 			s.Logger.Error("Failed to accept connection", "err", err)
 			continue
@@ -164,9 +171,6 @@ func (s *SocketServer) handleRequests(closeConn chan error, conn io.Reader, resp
 			buf := make([]byte, size)
 			buf = buf[:runtime.Stack(buf, false)]
 			err := fmt.Errorf("recovered from panic: %v\n%s", r, buf)
-			if !s.isLoggerSet {
-				fmt.Fprintln(os.Stderr, err)
-			}
 			closeConn <- err
 			s.appMtx.Unlock()
 		}
@@ -212,9 +216,9 @@ func (s *SocketServer) handleRequest(req *types.Request, responses chan<- *types
 	case *types.Request_Query:
 		res := s.app.Query(*r.Query)
 		responses <- types.ToResponseQuery(res)
-	case *types.Request_InitChain:
-		res := s.app.InitChain(*r.InitChain)
-		responses <- types.ToResponseInitChain(res)
+	case *types.Request_InitLedger:
+		res := s.app.InitLedger(*r.InitLedger)
+		responses <- types.ToResponseInitLedger(res)
 	case *types.Request_BeginBlock:
 		res := s.app.BeginBlock(*r.BeginBlock)
 		responses <- types.ToResponseBeginBlock(res)
