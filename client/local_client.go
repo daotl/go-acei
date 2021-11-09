@@ -46,8 +46,8 @@ func NewLocalClient(mtx *gsync.Mutex, app types.Application, logger log.Standard
 }
 
 // Just a placeholder: localClient won't actually be used as a Suture service
-func (cli *localClient) run(ctx context.Context, ready func()) error {
-	ready()
+func (cli *localClient) run(ctx context.Context, ready func(error)) error {
+	ready(nil)
 	<-ctx.Done()
 	return nil
 }

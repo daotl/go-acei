@@ -68,7 +68,7 @@ func NewSocketClient(addr string, mustConnect bool, logger log.StandardLogger,
 }
 
 //func (cli *socketClient) OnStart() error {
-func (cli *socketClient) run(ctx context.Context, ready func()) error {
+func (cli *socketClient) run(ctx context.Context, ready func(error)) error {
 	// Reset state
 	cli.conn = nil
 	cli.reqQueue = make(chan *reqResWithContext, reqQueueSize)
@@ -95,6 +95,7 @@ RETRY_CONNECT_LOOP:
 			}
 			// Fail, stop or retry
 			if cli.mustConnect {
+				ready(err)
 				goto CLEANUP
 			}
 			cli.Logger.Error(fmt.Sprintf("abci.socketClient failed to connect to %v.  "+
@@ -109,7 +110,7 @@ RETRY_CONNECT_LOOP:
 	go cli.sendRequestsRoutine(ctx, conn)
 	go cli.recvResponseRoutine(conn)
 
-	ready()
+	ready(nil)
 	// Block until stopped
 	<-ctx.Done()
 

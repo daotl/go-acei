@@ -63,7 +63,7 @@ func dialerFunc(ctx context.Context, addr string) (net.Conn, error) {
 }
 
 // func (cli *grpcClient) OnStart() error {
-func (cli *grpcClient) run(ctx context.Context, ready func()) error {
+func (cli *grpcClient) run(ctx context.Context, ready func(error)) error {
 	// Reset state
 	cli.client = nil
 	cli.conn = nil
@@ -126,6 +126,7 @@ RETRY_CONNECT_LOOP:
 			}
 			// Fail, stop or retry
 			if cli.mustConnect {
+				ready(err)
 				goto CLEANUP
 			}
 			cli.Logger.Error(fmt.Sprintf("abci.grpcClient failed to connect to %v.  Retrying...\n", cli.addr), "err", err)
@@ -155,7 +156,7 @@ ENSURE_CONNECTED:
 		}
 	}
 
-	ready()
+	ready(nil)
 	// Block until stopped
 	<-ctx.Done()
 

@@ -50,20 +50,21 @@ func NewSocketServer(protoAddr string, app types.Application, logger log.Standar
 }
 
 //func (s *SocketServer) OnStart() error {
-func (s *SocketServer) run(ctx context.Context, ready func()) error {
+func (s *SocketServer) run(ctx context.Context, ready func(error)) error {
 	// Reset
 	s.listener = nil
 	s.conns = make(map[int]net.Conn)
 
 	ln, err := net.Listen(s.proto, s.addr)
 	if err != nil {
+		ready(err)
 		return err
 	}
 
 	s.listener = ln
 	go s.acceptConnectionsRoutine(ctx)
 
-	ready()
+	ready(nil)
 	// Block until stopped
 	<-ctx.Done()
 

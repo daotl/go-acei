@@ -3,8 +3,8 @@ module github.com/daotl/go-acei
 go 1.17
 
 require (
-	github.com/daotl/go-log/v2 v2.3.0
-	github.com/daotl/guts v0.0.0-20211031121630-c287fc0c1b2c
+	github.com/daotl/go-log/v2 v2.3.1
+	github.com/daotl/guts v0.0.0-20211104030439-986748a3e285
 	github.com/gogo/protobuf v1.3.2
 	github.com/libp2p/go-msgio v0.1.0
 	github.com/spf13/cobra v1.2.1

@@ -43,11 +43,12 @@ func NewGRPCServer(protoAddr string, app types.ACEIApplicationServer, logger log
 
 // OnStart starts the gRPC service.
 //func (s *GRPCServer) OnStart() error {
-func (s *GRPCServer) run(ctx context.Context, ready func()) error {
+func (s *GRPCServer) run(ctx context.Context, ready func(error)) error {
 
 	s.listener = nil
 	ln, err := net.Listen(s.proto, s.addr)
 	if err != nil {
+		ready(err)
 		return err
 	}
 
@@ -55,7 +56,7 @@ func (s *GRPCServer) run(ctx context.Context, ready func()) error {
 	s.server = grpc.NewServer()
 	types.RegisterACEIApplicationServer(s.server, s.app)
 
-	ready()
+	ready(nil)
 	s.Logger.Info("Listening", "proto", s.proto, "addr", s.addr)
 	if err := s.server.Serve(s.listener); err != nil {
 		s.Logger.Error("Error serving gRPC server", "err", err)
