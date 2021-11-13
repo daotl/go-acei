@@ -3,14 +3,15 @@ module github.com/daotl/go-acei
 go 1.17
 
 require (
+	github.com/daotl/go-datastore v0.5.0
+	github.com/daotl/go-ds-leveldb v0.5.0
 	github.com/daotl/go-log/v2 v2.3.1
-	github.com/daotl/guts v0.0.0-20211104030439-986748a3e285
+	github.com/daotl/guts v0.0.0-20211113085055-61af4fb97bb6
 	github.com/gogo/protobuf v1.3.2
 	github.com/libp2p/go-msgio v0.1.0
 	github.com/spf13/cobra v1.2.1
 	github.com/stretchr/testify v1.7.0
 	github.com/tendermint/tendermint v0.35.0-rc3
-	github.com/tendermint/tm-db v0.6.4
 	google.golang.org/grpc v1.41.0
 	google.golang.org/protobuf v1.27.1
 )
@@ -27,7 +28,9 @@ require (
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/golang/snappy v0.0.3 // indirect
 	github.com/google/btree v1.0.0 // indirect
+	github.com/google/uuid v1.3.0 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
+	github.com/jbenet/goprocess v0.1.4 // indirect
 	github.com/jmhodges/levigo v1.0.0 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/multiformats/go-varint v0.0.6 // indirect
@@ -41,6 +44,7 @@ require (
 	github.com/stretchr/objx v0.1.1 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20200815110645-5c35d600f0ca // indirect
 	github.com/tecbot/gorocksdb v0.0.0-20191217155057-f0fad39f321c // indirect
+	github.com/tendermint/tm-db v0.6.4 // indirect
 	github.com/thejerf/suture/v4 v4.0.1 // indirect
 	go.etcd.io/bbolt v1.3.5 // indirect
 	go.uber.org/atomic v1.9.0 // indirect

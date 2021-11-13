@@ -116,21 +116,15 @@ func setupClientServer(t *testing.T, app types.Application,
 
 	s, err := server.NewServer(addr, "socket", app, nil)
 	require.NoError(t, err)
-	go func() {
-		err := s.Serve(context.Background())
-		require.NoError(t, err)
-	}()
-	err = <-s.Ready()
-	require.NoError(t, err)
+	readyCh, sResCh := s.Start(context.Background())
+	require.NoError(t, <-readyCh)
+	go func() { require.NoError(t, <-sResCh) }()
 
 	c, err := aceiclient.NewSocketClient(addr, true, nil)
 	require.NoError(t, err)
-	go func() {
-		err := c.Serve(context.Background())
-		require.NoError(t, err)
-	}()
-	err = <-c.Ready()
-	require.NoError(t, err)
+	readyCh, cResCh := c.Start(context.Background())
+	require.NoError(t, <-readyCh)
+	go func() { require.NoError(t, <-cResCh) }()
 
 	return s, c
 }
