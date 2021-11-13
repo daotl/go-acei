@@ -56,11 +56,16 @@ func (s *GRPCServer) run(ctx context.Context, ready func(error)) error {
 	s.server = grpc.NewServer()
 	types.RegisterACEIApplicationServer(s.server, s.app)
 
+	go func() {
+		s.Logger.Info("Listening", "proto", s.proto, "addr", s.addr)
+		if err := s.server.Serve(s.listener); err != nil {
+			s.Logger.Error("Error serving gRPC server", "err", err)
+		}
+	}()
+
 	ready(nil)
-	s.Logger.Info("Listening", "proto", s.proto, "addr", s.addr)
-	if err := s.server.Serve(s.listener); err != nil {
-		s.Logger.Error("Error serving gRPC server", "err", err)
-	}
+	// Block until stopped
+	<-ctx.Done()
 
 	// OnStop stops the gRPC server.
 	//func (s *GRPCServer) OnStop() {
