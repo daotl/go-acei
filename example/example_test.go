@@ -11,17 +11,16 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-
 	"google.golang.org/grpc"
 
-	"github.com/tendermint/tendermint/libs/log"
-	tmnet "github.com/tendermint/tendermint/libs/net"
+	"github.com/daotl/go-log/v2"
+	gnet "github.com/daotl/guts/net"
 
-	abciclient "github.com/tendermint/tendermint/abci/client"
-	"github.com/tendermint/tendermint/abci/example/code"
-	"github.com/tendermint/tendermint/abci/example/kvstore"
-	abciserver "github.com/tendermint/tendermint/abci/server"
-	"github.com/tendermint/tendermint/abci/types"
+	aceiclient "github.com/daotl/go-acei/client"
+	"github.com/daotl/go-acei/example/code"
+	"github.com/daotl/go-acei/example/kvstore"
+	aceiserver "github.com/daotl/go-acei/server"
+	"github.com/daotl/go-acei/types"
 )
 
 func init() {
@@ -50,24 +49,37 @@ func testStream(t *testing.T, app types.Application) {
 	socket := fmt.Sprintf("unix://%v", socketFile)
 
 	// Start the listener
-	server := abciserver.NewSocketServer(socket, app)
-	server.SetLogger(log.TestingLogger().With("module", "abci-server"))
-	err := server.Start()
+	server, err := aceiserver.NewSocketServer(socket, app,
+		log.TestingLogger().With("module", "acei-server"))
+	require.NoError(t, err)
+	go func() {
+		err := server.Serve(context.Background())
+		require.NoError(t, err)
+	}()
+	err = <-server.Ready()
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		if err := server.Stop(); err != nil {
+		if stopped, err := server.Stop(); err != nil {
 			t.Error(err)
+		} else {
+			<-stopped
 		}
 	})
 
 	// Connect to the socket
-	client := abciclient.NewSocketClient(socket, false)
-	client.SetLogger(log.TestingLogger().With("module", "abci-client"))
-	err = client.Start()
+	client, err := aceiclient.NewSocketClient(socket, false,
+		log.TestingLogger().With("module", "acei-client"))
+	go func() {
+		err := client.Serve(context.Background())
+		require.NoError(t, err)
+	}()
+	err = <-client.Ready()
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		if err := client.Stop(); err != nil {
+		if stopped, err := client.Stop(); err != nil {
 			t.Error(err)
+		} else {
+			<-stopped
 		}
 	})
 
@@ -124,25 +136,32 @@ func testStream(t *testing.T, app types.Application) {
 // test grpc
 
 func dialerFunc(ctx context.Context, addr string) (net.Conn, error) {
-	return tmnet.Connect(addr)
+	return gnet.Connect(addr)
 }
 
-func testGRPCSync(t *testing.T, app types.ABCIApplicationServer) {
+func testGRPCSync(t *testing.T, app types.ACEIApplicationServer) {
 	numDeliverTxs := 2000
 	socketFile := fmt.Sprintf("test-%08x.sock", rand.Int31n(1<<30))
 	defer os.Remove(socketFile)
 	socket := fmt.Sprintf("unix://%v", socketFile)
 
 	// Start the listener
-	server := abciserver.NewGRPCServer(socket, app)
-	server.SetLogger(log.TestingLogger().With("module", "abci-server"))
-	if err := server.Start(); err != nil {
+	server, err := aceiserver.NewGRPCServer(socket, app,
+		log.TestingLogger().With("module", "acei-server"))
+	require.NoError(t, err)
+	go func() {
+		err := server.Serve(context.Background())
+		require.NoError(t, err)
+	}()
+	if err := <-server.Ready(); err != nil {
 		t.Fatalf("Error starting GRPC server: %v", err.Error())
 	}
 
 	t.Cleanup(func() {
-		if err := server.Stop(); err != nil {
+		if stopped, err := server.Stop(); err != nil {
 			t.Error(err)
+		} else {
+			<-stopped
 		}
 	})
 
@@ -158,7 +177,7 @@ func testGRPCSync(t *testing.T, app types.ABCIApplicationServer) {
 		}
 	})
 
-	client := types.NewABCIApplicationClient(conn)
+	client := types.NewACEIApplicationClient(conn)
 
 	// Write requests
 	for counter := 0; counter < numDeliverTxs; counter++ {

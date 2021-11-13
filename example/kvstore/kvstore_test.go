@@ -7,16 +7,14 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/daotl/go-log/v2"
+	ssrv "github.com/daotl/guts/service/suture"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/libs/service"
-
-	abciclient "github.com/tendermint/tendermint/abci/client"
-	"github.com/tendermint/tendermint/abci/example/code"
-	abciserver "github.com/tendermint/tendermint/abci/server"
-	"github.com/tendermint/tendermint/abci/types"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+	aceiclient "github.com/daotl/go-acei/client"
+	"github.com/daotl/go-acei/example/code"
+	aceiserver "github.com/daotl/go-acei/server"
+	"github.com/daotl/go-acei/types"
 )
 
 const (
@@ -74,7 +72,7 @@ func TestKVStoreKV(t *testing.T) {
 }
 
 func TestPersistentKVStoreKV(t *testing.T) {
-	dir, err := ioutil.TempDir("/tmp", "abci-kvstore-test") // TODO
+	dir, err := ioutil.TempDir("/tmp", "acei-kvstore-test") // TODO
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,13 +88,13 @@ func TestPersistentKVStoreKV(t *testing.T) {
 }
 
 func TestPersistentKVStoreInfo(t *testing.T) {
-	dir, err := ioutil.TempDir("/tmp", "abci-kvstore-test") // TODO
+	dir, err := ioutil.TempDir("/tmp", "acei-kvstore-test") // TODO
 	if err != nil {
 		t.Fatal(err)
 	}
 	kvstore := NewPersistentKVStoreApplication(dir)
 	InitKVStore(kvstore)
-	height := int64(0)
+	height := uint64(0)
 
 	resInfo := kvstore.Info(types.RequestInfo{})
 	if resInfo.LastBlockHeight != height {
@@ -104,9 +102,9 @@ func TestPersistentKVStoreInfo(t *testing.T) {
 	}
 
 	// make and apply block
-	height = int64(1)
+	height = uint64(1)
 	hash := []byte("foo")
-	header := tmproto.Header{
+	header := types.Header{
 		Height: height,
 	}
 	kvstore.BeginBlock(types.RequestBeginBlock{Hash: hash, Header: header})
@@ -122,7 +120,7 @@ func TestPersistentKVStoreInfo(t *testing.T) {
 
 // add a validator, remove a validator, update a validator
 func TestValUpdates(t *testing.T) {
-	dir, err := ioutil.TempDir("/tmp", "abci-kvstore-test") // TODO
+	dir, err := ioutil.TempDir("/tmp", "acei-kvstore-test") // TODO
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +131,7 @@ func TestValUpdates(t *testing.T) {
 	nInit := 5
 	vals := RandVals(total)
 	// initialize with the first nInit
-	kvstore.InitChain(types.RequestInitChain{
+	kvstore.InitLedger(types.RequestInitLedger{
 		Validators: vals[:nInit],
 	})
 
@@ -194,9 +192,9 @@ func makeApplyBlock(
 	diff []types.ValidatorUpdate,
 	txs ...[]byte) {
 	// make and apply block
-	height := int64(heightInt)
+	height := uint64(heightInt)
 	hash := []byte("foo")
-	header := tmproto.Header{
+	header := types.Header{
 		Height: height,
 	}
 
@@ -229,50 +227,82 @@ func valsEqual(t *testing.T, vals1, vals2 []types.ValidatorUpdate) {
 	}
 }
 
-func makeSocketClientServer(app types.Application, name string) (abciclient.Client, service.Service, error) {
+func makeSocketClientServer(app types.Application, name string) (aceiclient.Client, ssrv.Service, error) {
 	// Start the listener
 	socket := fmt.Sprintf("unix://%s.sock", name)
 	logger := log.TestingLogger()
 
-	server := abciserver.NewSocketServer(socket, app)
-	server.SetLogger(logger.With("module", "abci-server"))
-	if err := server.Start(); err != nil {
+	server, err := aceiserver.NewSocketServer(socket, app, logger.With("module", "acei-server"))
+	if err != nil {
 		return nil, nil, err
 	}
+	readyCh, sResCh := server.Start(context.Background())
+	if err := <-readyCh; err != nil {
+		return nil, nil, err
+	}
+	go func() {
+		if err := <-sResCh; err != nil {
+			panic(err)
+		}
+	}()
 
 	// Connect to the socket
-	client := abciclient.NewSocketClient(socket, false)
-	client.SetLogger(logger.With("module", "abci-client"))
-	if err := client.Start(); err != nil {
-		if err = server.Stop(); err != nil {
-			return nil, nil, err
+	client, err := aceiclient.NewSocketClient(socket, false, logger.With("module", "acei-client"))
+	if err != nil {
+		return nil, nil, err
+	}
+	readyCh, cResCh := client.Start(context.Background())
+	if <-readyCh != nil {
+		if stopped, err := server.Stop(); err == nil {
+			<-stopped
 		}
 		return nil, nil, err
 	}
+	go func() {
+		if err := <-cResCh; err != nil {
+			panic(err)
+		}
+	}()
 
 	return client, server, nil
 }
 
-func makeGRPCClientServer(app types.Application, name string) (abciclient.Client, service.Service, error) {
+func makeGRPCClientServer(app types.Application, name string) (aceiclient.Client, ssrv.Service, error) {
 	// Start the listener
 	socket := fmt.Sprintf("unix://%s.sock", name)
 	logger := log.TestingLogger()
 
 	gapp := types.NewGRPCApplication(app)
-	server := abciserver.NewGRPCServer(socket, gapp)
-	server.SetLogger(logger.With("module", "abci-server"))
-	if err := server.Start(); err != nil {
+	server, err := aceiserver.NewGRPCServer(socket, gapp, logger.With("module", "acei-server"))
+	if err != nil {
 		return nil, nil, err
 	}
+	readyCh, sResCh := server.Start(context.Background())
+	if err := <-readyCh; err != nil {
+		return nil, nil, err
+	}
+	go func() {
+		if err := <-sResCh; err != nil {
+			panic(err)
+		}
+	}()
 
-	client := abciclient.NewGRPCClient(socket, true)
-	client.SetLogger(logger.With("module", "abci-client"))
-	if err := client.Start(); err != nil {
-		if err := server.Stop(); err != nil {
-			return nil, nil, err
+	client, err := aceiclient.NewGRPCClient(socket, true, logger.With("module", "acei-client"))
+	if err != nil {
+		return nil, nil, err
+	}
+	readyCh, cResCh := client.Start(context.Background())
+	if <-readyCh != nil {
+		if stopped, err := server.Stop(); err == nil {
+			<-stopped
 		}
 		return nil, nil, err
 	}
+	go func() {
+		if err := <-cResCh; err != nil {
+			panic(err)
+		}
+	}()
 	return client, server, nil
 }
 
@@ -282,13 +312,17 @@ func TestClientServer(t *testing.T) {
 	client, server, err := makeSocketClientServer(kvstore, "kvstore-socket")
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		if err := server.Stop(); err != nil {
+		if stopped, err := server.Stop(); err != nil {
 			t.Error(err)
+		} else {
+			<-stopped
 		}
 	})
 	t.Cleanup(func() {
-		if err := client.Stop(); err != nil {
+		if stopped, err := client.Stop(); err != nil {
 			t.Error(err)
+		} else {
+			<-stopped
 		}
 	})
 
@@ -300,20 +334,24 @@ func TestClientServer(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
-		if err := gserver.Stop(); err != nil {
+		if stopped, err := gserver.Stop(); err != nil {
 			t.Error(err)
+		} else {
+			<-stopped
 		}
 	})
 	t.Cleanup(func() {
-		if err := gclient.Stop(); err != nil {
+		if stopped, err := gclient.Stop(); err != nil {
 			t.Error(err)
+		} else {
+			<-stopped
 		}
 	})
 
 	runClientTests(t, gclient)
 }
 
-func runClientTests(t *testing.T, client abciclient.Client) {
+func runClientTests(t *testing.T, client aceiclient.Client) {
 	// run some tests....
 	key := testKey
 	value := key
@@ -325,7 +363,7 @@ func runClientTests(t *testing.T, client abciclient.Client) {
 	testClient(t, client, tx, key, value)
 }
 
-func testClient(t *testing.T, app abciclient.Client, tx []byte, key, value string) {
+func testClient(t *testing.T, app aceiclient.Client, tx []byte, key, value string) {
 	ar, err := app.DeliverTxSync(ctx, types.RequestDeliverTx{Tx: tx})
 	require.NoError(t, err)
 	require.False(t, ar.IsErr(), ar)

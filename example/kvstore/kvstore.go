@@ -6,32 +6,33 @@ import (
 	"encoding/json"
 	"fmt"
 
-	dbm "github.com/tendermint/tm-db"
+	dstore "github.com/daotl/go-datastore"
+	"github.com/daotl/go-datastore/key"
 
-	"github.com/tendermint/tendermint/abci/example/code"
-	"github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/version"
+	"github.com/daotl/go-acei/example/code"
+	"github.com/daotl/go-acei/types"
+	"github.com/daotl/go-acei/version"
 )
 
 var (
-	stateKey        = []byte("stateKey")
-	kvPairPrefixKey = []byte("kvPairKey:")
+	stateKey        = key.NewBytesKeyFromString("stateKey")
+	kvPairPrefixKey = key.NewBytesKeyFromString("kvPairKey:")
 
 	ProtocolVersion uint64 = 0x1
 )
 
 type State struct {
-	db      dbm.DB
+	ds      dstore.Datastore
 	Size    int64  `json:"size"`
-	Height  int64  `json:"height"`
+	Height  uint64 `json:"height"`
 	AppHash []byte `json:"app_hash"`
 }
 
-func loadState(db dbm.DB) State {
+func loadState(ds dstore.Datastore) State {
 	var state State
-	state.db = db
-	stateBytes, err := db.Get(stateKey)
-	if err != nil {
+	state.ds = ds
+	stateBytes, err := ds.Get(bg, stateKey)
+	if err != nil && err != dstore.ErrNotFound {
 		panic(err)
 	}
 	if len(stateBytes) == 0 {
@@ -49,14 +50,14 @@ func saveState(state State) {
 	if err != nil {
 		panic(err)
 	}
-	err = state.db.Set(stateKey, stateBytes)
+	err = state.ds.Put(bg, stateKey, stateBytes)
 	if err != nil {
 		panic(err)
 	}
 }
 
-func prefixKey(key []byte) []byte {
-	return append(kvPairPrefixKey, key...)
+func prefixKey(key []byte) key.Key {
+	return kvPairPrefixKey.ChildBytes(key)
 }
 
 //---------------------------------------------------
@@ -67,18 +68,22 @@ type Application struct {
 	types.BaseApplication
 
 	state        State
-	RetainBlocks int64 // blocks to retain after commit (via ResponseCommit.RetainHeight)
+	RetainBlocks uint64 // blocks to retain after commit (via ResponseCommit.RetainHeight)
 }
 
 func NewApplication() *Application {
-	state := loadState(dbm.NewMemDB())
+	d, err := dstore.NewMapDatastore(key.KeyTypeBytes)
+	if err != nil {
+		panic(err)
+	}
+	state := loadState(d)
 	return &Application{state: state}
 }
 
 func (app *Application) Info(req types.RequestInfo) (resInfo types.ResponseInfo) {
 	return types.ResponseInfo{
 		Data:             fmt.Sprintf("{\"size\":%v}", app.state.Size),
-		Version:          version.ABCIVersion,
+		Version:          version.Version,
 		AppVersion:       ProtocolVersion,
 		LastBlockHeight:  app.state.Height,
 		LastBlockAppHash: app.state.AppHash,
@@ -96,7 +101,7 @@ func (app *Application) DeliverTx(req types.RequestDeliverTx) types.ResponseDeli
 		key, value = string(req.Tx), string(req.Tx)
 	}
 
-	err := app.state.db.Set(prefixKey([]byte(key)), []byte(value))
+	err := app.state.ds.Put(bg, prefixKey([]byte(key)), []byte(value))
 	if err != nil {
 		panic(err)
 	}
@@ -122,7 +127,7 @@ func (app *Application) CheckTx(req types.RequestCheckTx) types.ResponseCheckTx 
 }
 
 func (app *Application) Commit() types.ResponseCommit {
-	// Using a memdb - just return the big endian size of the db
+	// Using a memdb - just return the big endian size of the ds
 	appHash := make([]byte, 8)
 	binary.PutVarint(appHash, app.state.Size)
 	app.state.AppHash = appHash
@@ -139,7 +144,7 @@ func (app *Application) Commit() types.ResponseCommit {
 // Returns an associated value or nil if missing.
 func (app *Application) Query(reqQuery types.RequestQuery) (resQuery types.ResponseQuery) {
 	if reqQuery.Prove {
-		value, err := app.state.db.Get(prefixKey(reqQuery.Data))
+		value, err := app.state.ds.Get(bg, prefixKey(reqQuery.Data))
 		if err != nil {
 			panic(err)
 		}
@@ -157,7 +162,7 @@ func (app *Application) Query(reqQuery types.RequestQuery) (resQuery types.Respo
 	}
 
 	resQuery.Key = reqQuery.Data
-	value, err := app.state.db.Get(prefixKey(reqQuery.Data))
+	value, err := app.state.ds.Get(bg, prefixKey(reqQuery.Data))
 	if err != nil {
 		panic(err)
 	}

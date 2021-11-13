@@ -7,13 +7,14 @@ import (
 	"strconv"
 	"strings"
 
-	dbm "github.com/tendermint/tm-db"
+	dskey "github.com/daotl/go-datastore/key"
+	dsq "github.com/daotl/go-datastore/query"
+	leveldb "github.com/daotl/go-ds-leveldb"
+	"github.com/daotl/go-log/v2"
 
-	"github.com/tendermint/tendermint/abci/example/code"
-	"github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/crypto/encoding"
-	"github.com/tendermint/tendermint/libs/log"
-	cryptoproto "github.com/tendermint/tendermint/proto/tendermint/crypto"
+	"github.com/daotl/go-acei/crypto/encoding"
+	"github.com/daotl/go-acei/example/code"
+	"github.com/daotl/go-acei/types"
 )
 
 const (
@@ -30,14 +31,14 @@ type PersistentKVStoreApplication struct {
 	// validator set
 	ValUpdates []types.ValidatorUpdate
 
-	valAddrToPubKeyMap map[string]cryptoproto.PublicKey
+	valAddrToPubKeyMap map[string]types.PublicKey
 
-	logger log.Logger
+	logger log.StandardLogger
 }
 
 func NewPersistentKVStoreApplication(dbDir string) *PersistentKVStoreApplication {
 	name := "kvstore"
-	db, err := dbm.NewGoLevelDB(name, dbDir)
+	db, err := leveldb.NewDatastore(dbDir+"/"+name, dskey.KeyTypeBytes, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -46,16 +47,16 @@ func NewPersistentKVStoreApplication(dbDir string) *PersistentKVStoreApplication
 
 	return &PersistentKVStoreApplication{
 		app:                &Application{state: state},
-		valAddrToPubKeyMap: make(map[string]cryptoproto.PublicKey),
-		logger:             log.NewNopLogger(),
+		valAddrToPubKeyMap: make(map[string]types.PublicKey),
+		logger:             log.NopLogger(),
 	}
 }
 
 func (app *PersistentKVStoreApplication) Close() error {
-	return app.app.state.db.Close()
+	return app.app.state.ds.Close()
 }
 
-func (app *PersistentKVStoreApplication) SetLogger(l log.Logger) {
+func (app *PersistentKVStoreApplication) SetLogger(l log.StandardLogger) {
 	app.logger = l
 }
 
@@ -84,7 +85,7 @@ func (app *PersistentKVStoreApplication) CheckTx(req types.RequestCheckTx) types
 	return app.app.CheckTx(req)
 }
 
-// Commit will panic if InitChain was not called
+// Commit will panic if InitLedger was not called
 func (app *PersistentKVStoreApplication) Commit() types.ResponseCommit {
 	return app.app.Commit()
 }
@@ -94,8 +95,8 @@ func (app *PersistentKVStoreApplication) Commit() types.ResponseCommit {
 func (app *PersistentKVStoreApplication) Query(reqQuery types.RequestQuery) (resQuery types.ResponseQuery) {
 	switch reqQuery.Path {
 	case "/val":
-		key := []byte("val:" + string(reqQuery.Data))
-		value, err := app.app.state.db.Get(key)
+		key := dskey.NewBytesKeyFromString("val:" + string(reqQuery.Data))
+		value, err := app.app.state.ds.Get(bg, key)
 		if err != nil {
 			panic(err)
 		}
@@ -109,14 +110,14 @@ func (app *PersistentKVStoreApplication) Query(reqQuery types.RequestQuery) (res
 }
 
 // Save the validators in the merkle tree
-func (app *PersistentKVStoreApplication) InitChain(req types.RequestInitChain) types.ResponseInitChain {
+func (app *PersistentKVStoreApplication) InitLedger(req types.RequestInitLedger) types.ResponseInitLedger {
 	for _, v := range req.Validators {
 		r := app.updateValidator(v)
 		if r.IsErr() {
 			app.logger.Error("Error updating validators", "r", r)
 		}
 	}
-	return types.ResponseInitChain{}
+	return types.ResponseInitLedger{}
 }
 
 // Track the block hash and header information
@@ -174,27 +175,27 @@ func (app *PersistentKVStoreApplication) ApplySnapshotChunk(
 // update validators
 
 func (app *PersistentKVStoreApplication) Validators() (validators []types.ValidatorUpdate) {
-	itr, err := app.app.state.db.Iterator(nil, nil)
+	results, err := app.app.state.ds.Query(bg, dsq.Query{})
 	if err != nil {
 		panic(err)
 	}
-	for ; itr.Valid(); itr.Next() {
-		if isValidatorTx(itr.Key()) {
+	for r := range results.Next() {
+		if isValidatorTx(r.Key.Bytes()) {
 			validator := new(types.ValidatorUpdate)
-			err := types.ReadMessage(bytes.NewBuffer(itr.Value()), validator)
+			err := types.ReadMessage(bytes.NewBuffer(r.Value), validator)
 			if err != nil {
 				panic(err)
 			}
 			validators = append(validators, *validator)
 		}
 	}
-	if err = itr.Error(); err != nil {
+	if err = results.Close(); err != nil {
 		panic(err)
 	}
 	return
 }
 
-func MakeValSetChangeTx(pubkey cryptoproto.PublicKey, power int64) []byte {
+func MakeValSetChangeTx(pubkey types.PublicKey, power int64) []byte {
 	pk, err := encoding.PubKeyFromProto(pubkey)
 	if err != nil {
 		panic(err)
@@ -247,11 +248,11 @@ func (app *PersistentKVStoreApplication) updateValidator(v types.ValidatorUpdate
 	if err != nil {
 		panic(fmt.Errorf("can't decode public key: %w", err))
 	}
-	key := []byte("val:" + string(pubkey.Bytes()))
+	key := dskey.NewBytesKeyFromString("val:" + string(pubkey.Bytes()))
 
 	if v.Power == 0 {
 		// remove validator
-		hasKey, err := app.app.state.db.Has(key)
+		hasKey, err := app.app.state.ds.Has(bg, key)
 		if err != nil {
 			panic(err)
 		}
@@ -261,7 +262,7 @@ func (app *PersistentKVStoreApplication) updateValidator(v types.ValidatorUpdate
 				Code: code.CodeTypeUnauthorized,
 				Log:  fmt.Sprintf("Cannot remove non-existent validator %s", pubStr)}
 		}
-		if err = app.app.state.db.Delete(key); err != nil {
+		if err = app.app.state.ds.Delete(bg, key); err != nil {
 			panic(err)
 		}
 		delete(app.valAddrToPubKeyMap, string(pubkey.Address()))
@@ -273,7 +274,7 @@ func (app *PersistentKVStoreApplication) updateValidator(v types.ValidatorUpdate
 				Code: code.CodeTypeEncodingError,
 				Log:  fmt.Sprintf("Error encoding validator: %v", err)}
 		}
-		if err = app.app.state.db.Set(key, value.Bytes()); err != nil {
+		if err = app.app.state.ds.Put(bg, key, value.Bytes()); err != nil {
 			panic(err)
 		}
 		app.valAddrToPubKeyMap[string(pubkey.Address())] = v.PubKey
