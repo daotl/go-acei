@@ -7,13 +7,14 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/tendermint/tendermint/abci/types"
-	tmnet "github.com/tendermint/tendermint/libs/net"
+	gnet "github.com/tendermint/tendermint/libs/net"
+
+	"github.com/daotl/go-acei/types"
 )
 
 func main() {
 
-	conn, err := tmnet.Connect("unix://test.sock")
+	conn, err := gnet.Connect("unix://test.sock")
 	if err != nil {
 		log.Fatal(err.Error())
 	}

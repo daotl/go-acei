@@ -7,34 +7,35 @@ import (
 	"fmt"
 	mrand "math/rand"
 
-	abciclient "github.com/tendermint/tendermint/abci/client"
-	"github.com/tendermint/tendermint/abci/types"
-	tmrand "github.com/tendermint/tendermint/libs/rand"
+	grand "github.com/daotl/guts/rand"
+
+	aceiclient "github.com/daotl/go-acei/client"
+	"github.com/daotl/go-acei/types"
 )
 
 var ctx = context.Background()
 
-func InitChain(client abciclient.Client) error {
+func InitLedger(client aceiclient.Client) error {
 	total := 10
 	vals := make([]types.ValidatorUpdate, total)
 	for i := 0; i < total; i++ {
-		pubkey := tmrand.Bytes(33)
+		pubkey := grand.Bytes(33)
 		// nolint:gosec // G404: Use of weak random number generator
 		power := mrand.Int()
 		vals[i] = types.UpdateValidator(pubkey, int64(power), "")
 	}
-	_, err := client.InitChainSync(ctx, types.RequestInitChain{
+	_, err := client.InitLedgerSync(ctx, types.RequestInitLedger{
 		Validators: vals,
 	})
 	if err != nil {
-		fmt.Printf("Failed test: InitChain - %v\n", err)
+		fmt.Printf("Failed test: InitLedger - %v\n", err)
 		return err
 	}
-	fmt.Println("Passed test: InitChain")
+	fmt.Println("Passed test: InitLedger")
 	return nil
 }
 
-func Commit(client abciclient.Client, hashExp []byte) error {
+func Commit(client aceiclient.Client, hashExp []byte) error {
 	res, err := client.CommitSync(ctx)
 	data := res.Data
 	if err != nil {
@@ -51,7 +52,7 @@ func Commit(client abciclient.Client, hashExp []byte) error {
 	return nil
 }
 
-func DeliverTx(client abciclient.Client, txBytes []byte, codeExp uint32, dataExp []byte) error {
+func DeliverTx(client aceiclient.Client, txBytes []byte, codeExp uint32, dataExp []byte) error {
 	res, _ := client.DeliverTxSync(ctx, types.RequestDeliverTx{Tx: txBytes})
 	code, data, log := res.Code, res.Data, res.Log
 	if code != codeExp {
@@ -70,7 +71,7 @@ func DeliverTx(client abciclient.Client, txBytes []byte, codeExp uint32, dataExp
 	return nil
 }
 
-func CheckTx(client abciclient.Client, txBytes []byte, codeExp uint32, dataExp []byte) error {
+func CheckTx(client aceiclient.Client, txBytes []byte, codeExp uint32, dataExp []byte) error {
 	res, _ := client.CheckTxSync(ctx, types.RequestCheckTx{Tx: txBytes})
 	code, data, log := res.Code, res.Data, res.Log
 	if code != codeExp {

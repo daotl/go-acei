@@ -10,25 +10,29 @@ import (
 	"os"
 	"strings"
 
+	"github.com/daotl/go-log/v2"
+	gos "github.com/daotl/guts/os"
 	"github.com/spf13/cobra"
 
-	"github.com/tendermint/tendermint/libs/log"
-	tmos "github.com/tendermint/tendermint/libs/os"
-
-	abciclient "github.com/tendermint/tendermint/abci/client"
-	"github.com/tendermint/tendermint/abci/example/code"
-	"github.com/tendermint/tendermint/abci/example/kvstore"
-	"github.com/tendermint/tendermint/abci/server"
-	servertest "github.com/tendermint/tendermint/abci/tests/server"
-	"github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/abci/version"
-	"github.com/tendermint/tendermint/proto/tendermint/crypto"
+	aceiclient "github.com/daotl/go-acei/client"
+	"github.com/daotl/go-acei/example/code"
+	"github.com/daotl/go-acei/example/kvstore"
+	"github.com/daotl/go-acei/server"
+	servertest "github.com/daotl/go-acei/tests/server"
+	"github.com/daotl/go-acei/types"
+	"github.com/daotl/go-acei/version"
 )
+
+func init() {
+	log.SetupLogging(log.Config{
+		AutoColor: true,
+		Level:     log.LevelInfo,
+	})
+}
 
 // client is a global variable so it can be reused by the console
 var (
-	client abciclient.Client
-	logger log.Logger
+	client aceiclient.Client
 
 	ctx = context.Background()
 )
@@ -51,7 +55,7 @@ var (
 )
 
 var RootCmd = &cobra.Command{
-	Use:   "abci-cli",
+	Use:   "acei-cli",
 	Short: "the ABCI CLI tool wraps an ABCI client",
 	Long:  "the ABCI CLI tool wraps an ABCI client and is used for testing ABCI servers",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
@@ -61,18 +65,14 @@ var RootCmd = &cobra.Command{
 			return nil
 		}
 
-		if logger == nil {
-			logger = log.MustNewDefaultLogger(log.LogFormatPlain, log.LogLevelInfo, false)
-		}
-
 		if client == nil {
 			var err error
-			client, err = abciclient.NewClient(flagAddress, flagAbci, false)
+			client, err = aceiclient.NewClient(flagAddress, flagAbci, false, log.Logger("acei-client"))
 			if err != nil {
 				return err
 			}
-			client.SetLogger(logger.With("module", "abci-client"))
-			if err := client.Start(); err != nil {
+			readyCh, _ := client.Start(context.Background())
+			if err := <-readyCh; err != nil {
 				return err
 			}
 		}
@@ -82,7 +82,7 @@ var RootCmd = &cobra.Command{
 
 // Structure for data passed to print response.
 type response struct {
-	// generic abci response
+	// generic acei response
 	Data []byte
 	Code uint32
 	Info string
@@ -94,8 +94,8 @@ type response struct {
 type queryResponse struct {
 	Key      []byte
 	Value    []byte
-	Height   int64
-	ProofOps *crypto.ProofOps
+	Height   uint64
+	ProofOps *types.ProofOps
 }
 
 func Execute() error {
@@ -110,7 +110,7 @@ func addGlobalFlags() {
 		"",
 		"tcp://0.0.0.0:26658",
 		"address of application socket")
-	RootCmd.PersistentFlags().StringVarP(&flagAbci, "abci", "", "socket", "either socket or grpc")
+	RootCmd.PersistentFlags().StringVarP(&flagAbci, "acei", "", "socket", "either socket or grpc")
 	RootCmd.PersistentFlags().BoolVarP(&flagVerbose,
 		"verbose",
 		"v",
@@ -153,13 +153,13 @@ func addCommands() {
 
 var batchCmd = &cobra.Command{
 	Use:   "batch",
-	Short: "run a batch of abci commands against an application",
-	Long: `run a batch of abci commands against an application
+	Short: "run a batch of acei commands against an application",
+	Long: `run a batch of acei commands against an application
 
 This command is run by piping in a file containing a series of commands
 you'd like to run:
 
-    abci-cli batch < example.file
+    acei-cli batch < example.file
 
 where example.file looks something like:
 
@@ -294,7 +294,7 @@ func compose(fs []func() error) error {
 func cmdTest(cmd *cobra.Command, args []string) error {
 	return compose(
 		[]func() error{
-			func() error { return servertest.InitChain(client) },
+			func() error { return servertest.InitLedger(client) },
 			func() error { return servertest.Commit(client, nil) },
 			func() error { return servertest.DeliverTx(client, []byte("abc"), code.CodeTypeBadNonce, nil) },
 			func() error { return servertest.Commit(client, nil) },
@@ -358,7 +358,7 @@ func cmdConsole(cmd *cobra.Command, args []string) error {
 
 func muxOnCommands(cmd *cobra.Command, pArgs []string) error {
 	if len(pArgs) < 2 {
-		return errors.New("expecting persistent args of the form: abci-cli [command] <...>")
+		return errors.New("expecting persistent args of the form: acei-cli [command] <...>")
 	}
 
 	// TODO: this parsing is fragile
@@ -553,7 +553,7 @@ func cmdQuery(cmd *cobra.Command, args []string) error {
 	resQuery, err := client.QuerySync(ctx, types.RequestQuery{
 		Data:   queryBytes,
 		Path:   flagPath,
-		Height: int64(flagHeight),
+		Height: uint64(flagHeight),
 		Prove:  flagProve,
 	})
 	if err != nil {
@@ -574,7 +574,7 @@ func cmdQuery(cmd *cobra.Command, args []string) error {
 }
 
 func cmdKVStore(cmd *cobra.Command, args []string) error {
-	logger := log.MustNewDefaultLogger(log.LogFormatPlain, log.LogLevelInfo, false)
+	logger := log.Logger("")
 
 	// Create the application - in memory or persisted to disk
 	var app types.Application
@@ -582,23 +582,28 @@ func cmdKVStore(cmd *cobra.Command, args []string) error {
 		app = kvstore.NewApplication()
 	} else {
 		app = kvstore.NewPersistentKVStoreApplication(flagPersist)
-		app.(*kvstore.PersistentKVStoreApplication).SetLogger(logger.With("module", "kvstore"))
+		app.(*kvstore.PersistentKVStoreApplication).SetLogger(log.Logger("kvstore"))
 	}
 
 	// Start the listener
-	srv, err := server.NewServer(flagAddress, flagAbci, app)
+	srv, err := server.NewServer(flagAddress, flagAbci, app, log.Logger("acei-server"))
 	if err != nil {
 		return err
 	}
-	srv.SetLogger(logger.With("module", "abci-server"))
-	if err := srv.Start(); err != nil {
+	readyCh, resultCh := srv.Start(context.Background())
+	if err := <-readyCh; err != nil {
 		return err
 	}
 
 	// Stop upon receiving SIGTERM or CTRL-C.
-	tmos.TrapSignal(logger, func() {
+	gos.TrapSignal(logger, func() {
 		// Cleanup
-		if err := srv.Stop(); err != nil {
+		stopped, err := srv.Stop()
+		if err != nil {
+			logger.Error("Error while stopping server", "err", err)
+		}
+		<-stopped
+		if err := <-resultCh; err != nil {
 			logger.Error("Error while stopping server", "err", err)
 		}
 	})

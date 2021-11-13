@@ -6,7 +6,7 @@ require (
 	github.com/daotl/go-datastore v0.5.0
 	github.com/daotl/go-ds-leveldb v0.5.0
 	github.com/daotl/go-log/v2 v2.3.1
-	github.com/daotl/guts v0.0.0-20211113085055-61af4fb97bb6
+	github.com/daotl/guts v0.0.0-20211113134343-8f7ed309bc45
 	github.com/gogo/protobuf v1.3.2
 	github.com/libp2p/go-msgio v0.1.0
 	github.com/spf13/cobra v1.2.1

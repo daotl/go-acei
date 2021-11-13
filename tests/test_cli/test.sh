@@ -18,7 +18,7 @@ function testExample() {
 	echo "Example $N: $APP"
 	$APP &> /dev/null &
 	sleep 2
-	abci-cli --log_level=error --verbose batch < "$INPUT" > "${INPUT}.out.new"
+	acei-cli --log_level=error --verbose batch < "$INPUT" > "${INPUT}.out.new"
 	killall "$3"
 
 	pre=$(shasum < "${INPUT}.out")
@@ -36,7 +36,7 @@ function testExample() {
 	rm "${INPUT}".out.new
 }
 
-testExample 1 tests/test_cli/ex1.abci abci-cli kvstore
+testExample 1 tests/test_cli/ex1.acei acei-cli kvstore
 
 echo ""
 echo "PASS"

@@ -1,13 +1,14 @@
 package tests
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
-	abciclientent "github.com/tendermint/tendermint/abci/client"
-	"github.com/tendermint/tendermint/abci/example/kvstore"
-	abciserver "github.com/tendermint/tendermint/abci/server"
+	abciclientent "github.com/daotl/go-acei/client"
+	"github.com/daotl/go-acei/example/kvstore"
+	abciserver "github.com/daotl/go-acei/server"
 )
 
 func TestClientServerNoAddrPrefix(t *testing.T) {
@@ -15,13 +16,15 @@ func TestClientServerNoAddrPrefix(t *testing.T) {
 	transport := "socket"
 	app := kvstore.NewApplication()
 
-	server, err := abciserver.NewServer(addr, transport, app)
+	server, err := abciserver.NewServer(addr, transport, app, nil)
 	assert.NoError(t, err, "expected no error on NewServer")
-	err = server.Start()
-	assert.NoError(t, err, "expected no error on server.Start")
+	readyCh, sResCh := server.Start(context.Background())
+	assert.NoError(t, <-readyCh, "expected no error on server.Start")
+	go func() { assert.NoError(t, <-sResCh, "expected no error on server stopping") }()
 
-	client, err := abciclientent.NewClient(addr, transport, true)
+	client, err := abciclientent.NewClient(addr, transport, true, nil)
 	assert.NoError(t, err, "expected no error on NewClient")
-	err = client.Start()
-	assert.NoError(t, err, "expected no error on client.Start")
+	readyCh, cResCh := client.Start(context.Background())
+	assert.NoError(t, <-readyCh, "expected no error on client.Start")
+	go func() { assert.NoError(t, <-cResCh, "expected no error on client stopping") }()
 }
