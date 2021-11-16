@@ -4,11 +4,10 @@ import (
 	"context"
 	"net"
 
-	"google.golang.org/grpc"
-
 	"github.com/daotl/go-log/v2"
 	gnet "github.com/daotl/guts/net"
 	ssrv "github.com/daotl/guts/service/suture"
+	"google.golang.org/grpc"
 
 	"github.com/daotl/go-acei/types"
 )
@@ -25,7 +24,7 @@ type GRPCServer struct {
 }
 
 // NewGRPCServer returns a new gRPC ABCI server
-func NewGRPCServer(protoAddr string, app types.ACEIApplicationServer, logger log.StandardLogger,
+func NewGRPCServer(logger log.StandardLogger, protoAddr string, app types.ACEIApplicationServer,
 ) (ssrv.Service, error) {
 	proto, addr := gnet.ProtocolAndAddress(protoAddr)
 	s := &GRPCServer{

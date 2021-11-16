@@ -10,11 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-
 	"github.com/daotl/go-log/v2"
 	gnet "github.com/daotl/guts/net"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 
 	aceiclient "github.com/daotl/go-acei/client"
 	"github.com/daotl/go-acei/example/code"
@@ -43,14 +42,15 @@ func TestGRPC(t *testing.T) {
 }
 
 func testStream(t *testing.T, app types.Application) {
+	t.Helper()
+
 	const numDeliverTxs = 20000
 	socketFile := fmt.Sprintf("test-%08x.sock", rand.Int31n(1<<30))
 	defer os.Remove(socketFile)
 	socket := fmt.Sprintf("unix://%v", socketFile)
-
 	// Start the listener
-	server, err := aceiserver.NewSocketServer(socket, app,
-		log.TestingLogger().With("module", "acei-server"))
+	server, err := aceiserver.NewSocketServer(log.TestingLogger().With("module", "acei-server"),
+		socket, app)
 	require.NoError(t, err)
 	go func() {
 		err := server.Serve(context.Background())
@@ -67,8 +67,8 @@ func testStream(t *testing.T, app types.Application) {
 	})
 
 	// Connect to the socket
-	client, err := aceiclient.NewSocketClient(socket, false,
-		log.TestingLogger().With("module", "acei-client"))
+	client, err := aceiclient.NewSocketClient(log.TestingLogger().With("module", "acei-client"),
+		socket, false)
 	go func() {
 		err := client.Serve(context.Background())
 		require.NoError(t, err)
@@ -144,10 +144,9 @@ func testGRPCSync(t *testing.T, app types.ACEIApplicationServer) {
 	socketFile := fmt.Sprintf("/tmp/test-%08x.sock", rand.Int31n(1<<30))
 	defer os.Remove(socketFile)
 	socket := fmt.Sprintf("unix://%v", socketFile)
-
 	// Start the listener
-	server, err := aceiserver.NewGRPCServer(socket, app,
-		log.TestingLogger().With("module", "acei-server"))
+	server, err := aceiserver.NewGRPCServer(log.TestingLogger().With("module", "acei-server"),
+		socket, app)
 	require.NoError(t, err)
 	go func() {
 		err := server.Serve(context.Background())

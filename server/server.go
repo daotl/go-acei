@@ -17,15 +17,15 @@ import (
 	"github.com/daotl/go-acei/types"
 )
 
-func NewServer(protoAddr, transport string, app types.Application, logger log.StandardLogger,
+func NewServer(logger log.StandardLogger, protoAddr, transport string, app types.Application,
 ) (ssrv.Service, error) {
 	var s ssrv.Service
 	var err error
 	switch transport {
 	case "socket":
-		s, err = NewSocketServer(protoAddr, app, logger)
+		s, err = NewSocketServer(logger, protoAddr, app)
 	case "grpc":
-		s, err = NewGRPCServer(protoAddr, types.NewGRPCApplication(app), logger)
+		s, err = NewGRPCServer(logger, protoAddr, types.NewGRPCApplication(app))
 	default:
 		err = fmt.Errorf("unknown server type %s", transport)
 	}

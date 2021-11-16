@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/daotl/go-log/v2"
+	ssrv "github.com/daotl/guts/service/suture"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	ssrv "github.com/daotl/guts/service/suture"
 
 	aceiclient "github.com/daotl/go-acei/client"
 	"github.com/daotl/go-acei/server"
@@ -21,8 +21,9 @@ var ctx = context.Background()
 
 func TestProperSyncCalls(t *testing.T) {
 	app := slowApp{}
+	logger := log.TestingLogger()
 
-	s, c := setupClientServer(t, app)
+	s, c := setupClientServer(t, logger, app)
 	t.Cleanup(func() {
 		if stopped, err := s.Stop(); err != nil {
 			t.Error(err)
@@ -61,8 +62,9 @@ func TestProperSyncCalls(t *testing.T) {
 
 func TestHangingSyncCalls(t *testing.T) {
 	app := slowApp{}
+	logger := log.TestingLogger()
 
-	s, c := setupClientServer(t, app)
+	s, c := setupClientServer(t, logger, app)
 	t.Cleanup(func() {
 		if stopped, err := s.Stop(); err != nil {
 			t.Log(err)
@@ -108,19 +110,24 @@ func TestHangingSyncCalls(t *testing.T) {
 	}
 }
 
-func setupClientServer(t *testing.T, app types.Application,
+func setupClientServer(
+	t *testing.T,
+	logger log.StandardLogger,
+	app types.Application,
 ) (ssrv.Service, aceiclient.Client) {
+	t.Helper()
+
 	// some port between 20k and 30k
 	port := 20000 + rand.Int31()%10000
 	addr := fmt.Sprintf("localhost:%d", port)
 
-	s, err := server.NewServer(addr, "socket", app, nil)
+	s, err := server.NewServer(logger, addr, "socket", app)
 	require.NoError(t, err)
 	readyCh, sResCh := s.Start(context.Background())
 	require.NoError(t, <-readyCh)
 	go func() { require.NoError(t, <-sResCh) }()
 
-	c, err := aceiclient.NewSocketClient(addr, true, nil)
+	c, err := aceiclient.NewSocketClient(logger, addr, true)
 	require.NoError(t, err)
 	readyCh, cResCh := c.Start(context.Background())
 	require.NoError(t, <-readyCh)

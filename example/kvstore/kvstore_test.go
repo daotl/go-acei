@@ -232,7 +232,7 @@ func makeSocketClientServer(app types.Application, name string) (aceiclient.Clie
 	socket := fmt.Sprintf("unix://%s.sock", name)
 	logger := log.TestingLogger()
 
-	server, err := aceiserver.NewSocketServer(socket, app, logger.With("module", "acei-server"))
+	server, err := aceiserver.NewSocketServer(logger.With("module", "acei-server"), socket, app)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -247,7 +247,7 @@ func makeSocketClientServer(app types.Application, name string) (aceiclient.Clie
 	}()
 
 	// Connect to the socket
-	client, err := aceiclient.NewSocketClient(socket, false, logger.With("module", "acei-client"))
+	client, err := aceiclient.NewSocketClient(logger.With("module", "acei-client"), socket, false)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -273,7 +273,7 @@ func makeGRPCClientServer(app types.Application, name string) (aceiclient.Client
 	logger := log.TestingLogger()
 
 	gapp := types.NewGRPCApplication(app)
-	server, err := aceiserver.NewGRPCServer(socket, gapp, logger.With("module", "acei-server"))
+	server, err := aceiserver.NewGRPCServer(logger.With("module", "acei-server"), socket, gapp)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -287,7 +287,7 @@ func makeGRPCClientServer(app types.Application, name string) (aceiclient.Client
 		}
 	}()
 
-	client, err := aceiclient.NewGRPCClient(socket, true, logger.With("module", "acei-client"))
+	client, err := aceiclient.NewGRPCClient(logger.With("module", "acei-client"), socket, true)
 	if err != nil {
 		return nil, nil, err
 	}

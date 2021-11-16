@@ -33,7 +33,7 @@ type SocketServer struct {
 	app    types.Application
 }
 
-func NewSocketServer(protoAddr string, app types.Application, logger log.StandardLogger,
+func NewSocketServer(logger log.StandardLogger, protoAddr string, app types.Application,
 ) (ssrv.Service, error) {
 	proto, addr := gnet.ProtocolAndAddress(protoAddr)
 	s := &SocketServer{

@@ -52,7 +52,7 @@ var _ Client = (*socketClient)(nil)
 // NewSocketClient creates a new socket client, which connects to a given
 // address. If mustConnect is true, the client will return an error upon start
 // if it fails to connect.
-func NewSocketClient(addr string, mustConnect bool, logger log.StandardLogger,
+func NewSocketClient(logger log.StandardLogger, addr string, mustConnect bool,
 ) (*socketClient, error) {
 	cli := &socketClient{
 		mustConnect: mustConnect,

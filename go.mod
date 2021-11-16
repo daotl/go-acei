@@ -1,6 +1,6 @@
 module github.com/daotl/go-acei
 
-go 1.17
+go 1.16
 
 require (
 	github.com/daotl/go-datastore v0.5.0
@@ -46,6 +46,7 @@ require (
 	github.com/tecbot/gorocksdb v0.0.0-20191217155057-f0fad39f321c // indirect
 	github.com/tendermint/tm-db v0.6.4 // indirect
 	github.com/thejerf/suture/v4 v4.0.1 // indirect
+	github.com/vektra/mockery/v2 v2.9.4 // indirect
 	go.etcd.io/bbolt v1.3.5 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.7.0 // indirect

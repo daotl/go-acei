@@ -56,8 +56,8 @@ var (
 
 var RootCmd = &cobra.Command{
 	Use:   "acei-cli",
-	Short: "the ABCI CLI tool wraps an ABCI client",
-	Long:  "the ABCI CLI tool wraps an ABCI client and is used for testing ABCI servers",
+	Short: "the ACEI CLI tool wraps an ACEI client",
+	Long:  "the ACEI CLI tool wraps an ACEI client and is used for testing ACEI servers",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 
 		switch cmd.Use {
@@ -67,7 +67,7 @@ var RootCmd = &cobra.Command{
 
 		if client == nil {
 			var err error
-			client, err = aceiclient.NewClient(flagAddress, flagAbci, false, log.Logger("acei-client"))
+			client, err = aceiclient.NewClient(log.Logger("acei-client"), flagAddress, flagAbci, false)
 			if err != nil {
 				return err
 			}
@@ -586,10 +586,11 @@ func cmdKVStore(cmd *cobra.Command, args []string) error {
 	}
 
 	// Start the listener
-	srv, err := server.NewServer(flagAddress, flagAbci, app, log.Logger("acei-server"))
+	srv, err := server.NewServer(log.Logger("acei-server"), flagAddress, flagAbci, app)
 	if err != nil {
 		return err
 	}
+
 	readyCh, resultCh := srv.Start(context.Background())
 	if err := <-readyCh; err != nil {
 		return err

@@ -17,7 +17,7 @@ const (
 	echoRetryIntervalSeconds = 1
 )
 
-//go:generate ../../scripts/mockery_generate.sh Client
+//go:generate ../scripts/mockery_generate.sh Client
 
 // Client defines an interface for an ACEI client.
 //
@@ -70,13 +70,13 @@ type Client interface {
 
 // NewClient returns a new ACEI client of the specified transport type.
 // It returns an error if the transport is not "socket" or "grpc"
-func NewClient(addr, transport string, mustConnect bool, logger log.StandardLogger,
+func NewClient(logger log.StandardLogger, addr, transport string, mustConnect bool,
 ) (client Client, err error) {
 	switch transport {
 	case "socket":
-		client, err = NewSocketClient(addr, mustConnect, logger)
+		client, err = NewSocketClient(logger, addr, mustConnect)
 	case "grpc":
-		client, err = NewGRPCClient(addr, mustConnect, logger)
+		client, err = NewGRPCClient(logger, addr, mustConnect)
 	default:
 		err = fmt.Errorf("unknown abci transport %s", transport)
 	}

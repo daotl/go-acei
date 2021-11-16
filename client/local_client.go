@@ -28,7 +28,7 @@ var _ Client = (*localClient)(nil)
 // methods of the given app.
 //
 // Both Async and Sync methods ignore the given context.Context parameter.
-func NewLocalClient(mtx *gsync.Mutex, app types.Application, logger log.StandardLogger,
+func NewLocalClient(logger log.StandardLogger, mtx *gsync.Mutex, app types.Application,
 ) (*localClient, error) {
 	if mtx == nil {
 		mtx = new(gsync.Mutex)

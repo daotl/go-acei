@@ -7,12 +7,11 @@ import (
 	"sync"
 	"time"
 
-	"google.golang.org/grpc"
-
 	"github.com/daotl/go-log/v2"
 	gnet "github.com/daotl/guts/net"
 	ssrv "github.com/daotl/guts/service/suture"
 	gsync "github.com/daotl/guts/sync"
+	"google.golang.org/grpc"
 
 	"github.com/daotl/go-acei/types"
 )
@@ -44,7 +43,7 @@ var _ Client = (*grpcClient)(nil)
 // which is expensive, but easy - if you want something better, use the socket
 // protocol! maybe one day, if people really want it, we use grpc streams, but
 // hopefully not :D
-func NewGRPCClient(addr string, mustConnect bool, logger log.StandardLogger,
+func NewGRPCClient(logger log.StandardLogger, addr string, mustConnect bool,
 ) (*grpcClient, error) {
 	cli := &grpcClient{
 		addr:        addr,
