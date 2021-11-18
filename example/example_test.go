@@ -27,21 +27,30 @@ func init() {
 }
 
 func TestKVStore(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	fmt.Println("### Testing KVStore")
-	testStream(t, kvstore.NewApplication())
+	testStream(ctx, t, kvstore.NewApplication(ctx))
 }
 
 func TestBaseApp(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	fmt.Println("### Testing BaseApp")
-	testStream(t, types.NewBaseApplication())
+	testStream(ctx, t, types.NewBaseApplication())
 }
 
 func TestGRPC(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	fmt.Println("### Testing GRPC")
-	testGRPCSync(t, types.NewGRPCApplication(types.NewBaseApplication()))
+	testGRPCSync(ctx, t, types.NewGRPCApplication(types.NewBaseApplication()))
 }
 
-func testStream(t *testing.T, app types.Application) {
+func testStream(ctx context.Context, t *testing.T, app types.Application) {
 	t.Helper()
 
 	const numDeliverTxs = 20000
@@ -53,7 +62,7 @@ func testStream(t *testing.T, app types.Application) {
 		socket, app)
 	require.NoError(t, err)
 	go func() {
-		err := server.Serve(context.Background())
+		err := server.Serve(ctx)
 		require.NoError(t, err)
 	}()
 	err = <-server.Ready()
@@ -69,8 +78,9 @@ func testStream(t *testing.T, app types.Application) {
 	// Connect to the socket
 	client, err := aceiclient.NewSocketClient(log.TestingLogger().With("module", "acei-client"),
 		socket, false)
+	require.NoError(t, err)
 	go func() {
-		err := client.Serve(context.Background())
+		err := client.Serve(ctx)
 		require.NoError(t, err)
 	}()
 	err = <-client.Ready()
@@ -110,8 +120,6 @@ func testStream(t *testing.T, app types.Application) {
 		}
 	})
 
-	ctx := context.Background()
-
 	// Write requests
 	for counter := 0; counter < numDeliverTxs; counter++ {
 		// Send request
@@ -139,7 +147,7 @@ func dialerFunc(ctx context.Context, addr string) (net.Conn, error) {
 	return gnet.Connect(addr)
 }
 
-func testGRPCSync(t *testing.T, app types.ACEIApplicationServer) {
+func testGRPCSync(ctx context.Context, t *testing.T, app types.ACEIApplicationServer) {
 	numDeliverTxs := 2000
 	socketFile := fmt.Sprintf("/tmp/test-%08x.sock", rand.Int31n(1<<30))
 	defer os.Remove(socketFile)
@@ -149,7 +157,7 @@ func testGRPCSync(t *testing.T, app types.ACEIApplicationServer) {
 		socket, app)
 	require.NoError(t, err)
 	go func() {
-		err := server.Serve(context.Background())
+		err := server.Serve(ctx)
 		require.NoError(t, err)
 	}()
 	if err := <-server.Ready(); err != nil {

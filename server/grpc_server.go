@@ -41,7 +41,7 @@ func NewGRPCServer(logger log.StandardLogger, protoAddr string, app types.ACEIAp
 }
 
 // OnStart starts the gRPC service.
-//func (s *GRPCServer) OnStart() error {
+//func (s *GRPCServer) OnStart(ctx context.Context) error {
 func (s *GRPCServer) run(ctx context.Context, ready func(error)) error {
 
 	s.listener = nil

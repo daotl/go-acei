@@ -2,6 +2,7 @@ package kvstore
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -28,10 +29,10 @@ type State struct {
 	AppHash []byte `json:"app_hash"`
 }
 
-func loadState(ds datastore.Datastore) State {
+func loadState(ctx context.Context, ds datastore.Datastore) State {
 	var state State
 	state.ds = ds
-	stateBytes, err := ds.Get(bg, stateKey)
+	stateBytes, err := ds.Get(ctx, stateKey)
 	if err != nil && err != datastore.ErrNotFound {
 		panic(err)
 	}
@@ -45,12 +46,12 @@ func loadState(ds datastore.Datastore) State {
 	return state
 }
 
-func saveState(state State) {
+func saveState(ctx context.Context, state State) {
 	stateBytes, err := json.Marshal(state)
 	if err != nil {
 		panic(err)
 	}
-	err = state.ds.Put(bg, stateKey, stateBytes)
+	err = state.ds.Put(ctx, stateKey, stateBytes)
 	if err != nil {
 		panic(err)
 	}
@@ -67,17 +68,18 @@ var _ types.Application = (*Application)(nil)
 type Application struct {
 	types.BaseApplication
 
+	ctx          context.Context
 	state        State
 	RetainBlocks uint64 // blocks to retain after commit (via ResponseCommit.RetainHeight)
 }
 
-func NewApplication() *Application {
+func NewApplication(ctx context.Context) *Application {
 	d, err := datastore.NewMapDatastore(key.KeyTypeBytes)
 	if err != nil {
 		panic(err)
 	}
-	state := loadState(d)
-	return &Application{state: state}
+	state := loadState(ctx, d)
+	return &Application{ctx: ctx, state: state}
 }
 
 func (app *Application) Info(req types.RequestInfo) (resInfo types.ResponseInfo) {
@@ -101,7 +103,7 @@ func (app *Application) DeliverTx(req types.RequestDeliverTx) types.ResponseDeli
 		key, value = string(req.Tx), string(req.Tx)
 	}
 
-	err := app.state.ds.Put(bg, prefixKey([]byte(key)), []byte(value))
+	err := app.state.ds.Put(app.ctx, prefixKey([]byte(key)), []byte(value))
 	if err != nil {
 		panic(err)
 	}
@@ -132,7 +134,7 @@ func (app *Application) Commit() types.ResponseCommit {
 	binary.PutVarint(appHash, app.state.Size)
 	app.state.AppHash = appHash
 	app.state.Height++
-	saveState(app.state)
+	saveState(app.ctx, app.state)
 
 	resp := types.ResponseCommit{Data: appHash}
 	if app.RetainBlocks > 0 && app.state.Height >= app.RetainBlocks {
@@ -144,7 +146,7 @@ func (app *Application) Commit() types.ResponseCommit {
 // Returns an associated value or nil if missing.
 func (app *Application) Query(reqQuery types.RequestQuery) (resQuery types.ResponseQuery) {
 	if reqQuery.Prove {
-		value, err := app.state.ds.Get(bg, prefixKey(reqQuery.Data))
+		value, err := app.state.ds.Get(app.ctx, prefixKey(reqQuery.Data))
 		if err != nil {
 			panic(err)
 		}
@@ -162,7 +164,7 @@ func (app *Application) Query(reqQuery types.RequestQuery) (resQuery types.Respo
 	}
 
 	resQuery.Key = reqQuery.Data
-	value, err := app.state.ds.Get(bg, prefixKey(reqQuery.Data))
+	value, err := app.state.ds.Get(app.ctx, prefixKey(reqQuery.Data))
 	if err != nil {
 		panic(err)
 	}

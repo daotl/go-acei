@@ -13,21 +13,25 @@ import (
 )
 
 func TestClientServerNoAddrPrefix(t *testing.T) {
-	addr := "localhost:26658"
-	transport := "socket"
-	app := kvstore.NewApplication()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
+	const (
+		addr      = "localhost:26658"
+		transport = "socket"
+	)
+	app := kvstore.NewApplication(ctx)
 	logger := log.TestingLogger()
 
 	server, err := abciserver.NewServer(logger, addr, transport, app)
 	assert.NoError(t, err, "expected no error on NewServer")
-	readyCh, sResCh := server.Start(context.Background())
+	readyCh, sResCh := server.Start(ctx)
 	assert.NoError(t, <-readyCh, "expected no error on server.Start")
 	go func() { assert.NoError(t, <-sResCh, "expected no error on server stopping") }()
 
 	client, err := abciclientent.NewClient(logger, addr, transport, true)
 	assert.NoError(t, err, "expected no error on NewClient")
-	readyCh, cResCh := client.Start(context.Background())
+	readyCh, cResCh := client.Start(ctx)
 	assert.NoError(t, <-readyCh, "expected no error on client.Start")
 	go func() { assert.NoError(t, <-cResCh, "expected no error on client stopping") }()
 }

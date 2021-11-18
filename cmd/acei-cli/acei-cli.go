@@ -2,16 +2,16 @@ package main
 
 import (
 	"bufio"
-	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/daotl/go-log/v2"
-	gos "github.com/daotl/guts/os"
 	"github.com/spf13/cobra"
 
 	aceiclient "github.com/daotl/go-acei/client"
@@ -33,8 +33,6 @@ func init() {
 // client is a global variable so it can be reused by the console
 var (
 	client aceiclient.Client
-
-	ctx = context.Background()
 )
 
 // flags
@@ -71,7 +69,8 @@ var RootCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-			readyCh, _ := client.Start(context.Background())
+
+			readyCh, _ := client.Start(cmd.Context())
 			if err := <-readyCh; err != nil {
 				return err
 			}
@@ -292,23 +291,24 @@ func compose(fs []func() error) error {
 }
 
 func cmdTest(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
 	return compose(
 		[]func() error{
-			func() error { return servertest.InitLedger(client) },
-			func() error { return servertest.Commit(client, nil) },
-			func() error { return servertest.DeliverTx(client, []byte("abc"), code.CodeTypeBadNonce, nil) },
-			func() error { return servertest.Commit(client, nil) },
-			func() error { return servertest.DeliverTx(client, []byte{0x00}, code.CodeTypeOK, nil) },
-			func() error { return servertest.Commit(client, []byte{0, 0, 0, 0, 0, 0, 0, 1}) },
-			func() error { return servertest.DeliverTx(client, []byte{0x00}, code.CodeTypeBadNonce, nil) },
-			func() error { return servertest.DeliverTx(client, []byte{0x01}, code.CodeTypeOK, nil) },
-			func() error { return servertest.DeliverTx(client, []byte{0x00, 0x02}, code.CodeTypeOK, nil) },
-			func() error { return servertest.DeliverTx(client, []byte{0x00, 0x03}, code.CodeTypeOK, nil) },
-			func() error { return servertest.DeliverTx(client, []byte{0x00, 0x00, 0x04}, code.CodeTypeOK, nil) },
+			func() error { return servertest.InitLedger(ctx, client) },
+			func() error { return servertest.Commit(ctx, client, nil) },
+			func() error { return servertest.DeliverTx(ctx, client, []byte("abc"), code.CodeTypeBadNonce, nil) },
+			func() error { return servertest.Commit(ctx, client, nil) },
+			func() error { return servertest.DeliverTx(ctx, client, []byte{0x00}, code.CodeTypeOK, nil) },
+			func() error { return servertest.Commit(ctx, client, []byte{0, 0, 0, 0, 0, 0, 0, 1}) },
+			func() error { return servertest.DeliverTx(ctx, client, []byte{0x00}, code.CodeTypeBadNonce, nil) },
+			func() error { return servertest.DeliverTx(ctx, client, []byte{0x01}, code.CodeTypeOK, nil) },
+			func() error { return servertest.DeliverTx(ctx, client, []byte{0x00, 0x02}, code.CodeTypeOK, nil) },
+			func() error { return servertest.DeliverTx(ctx, client, []byte{0x00, 0x03}, code.CodeTypeOK, nil) },
+			func() error { return servertest.DeliverTx(ctx, client, []byte{0x00, 0x00, 0x04}, code.CodeTypeOK, nil) },
 			func() error {
-				return servertest.DeliverTx(client, []byte{0x00, 0x00, 0x06}, code.CodeTypeBadNonce, nil)
+				return servertest.DeliverTx(ctx, client, []byte{0x00, 0x00, 0x06}, code.CodeTypeBadNonce, nil)
 			},
-			func() error { return servertest.Commit(client, []byte{0, 0, 0, 0, 0, 0, 0, 5}) },
+			func() error { return servertest.Commit(ctx, client, []byte{0, 0, 0, 0, 0, 0, 0, 5}) },
 		})
 }
 
@@ -443,13 +443,15 @@ func cmdEcho(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
 		msg = args[0]
 	}
-	res, err := client.EchoSync(ctx, msg)
+	res, err := client.EchoSync(cmd.Context(), msg)
 	if err != nil {
 		return err
 	}
+
 	printResponse(cmd, args, response{
 		Data: []byte(res.Message),
 	})
+
 	return nil
 }
 
@@ -459,7 +461,7 @@ func cmdInfo(cmd *cobra.Command, args []string) error {
 	if len(args) == 1 {
 		version = args[0]
 	}
-	res, err := client.InfoSync(ctx, types.RequestInfo{Version: version})
+	res, err := client.InfoSync(cmd.Context(), types.RequestInfo{Version: version})
 	if err != nil {
 		return err
 	}
@@ -484,7 +486,7 @@ func cmdDeliverTx(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	res, err := client.DeliverTxSync(ctx, types.RequestDeliverTx{Tx: txBytes})
+	res, err := client.DeliverTxSync(cmd.Context(), types.RequestDeliverTx{Tx: txBytes})
 	if err != nil {
 		return err
 	}
@@ -510,7 +512,7 @@ func cmdCheckTx(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	res, err := client.CheckTxSync(ctx, types.RequestCheckTx{Tx: txBytes})
+	res, err := client.CheckTxSync(cmd.Context(), types.RequestCheckTx{Tx: txBytes})
 	if err != nil {
 		return err
 	}
@@ -525,7 +527,7 @@ func cmdCheckTx(cmd *cobra.Command, args []string) error {
 
 // Get application Merkle root hash
 func cmdCommit(cmd *cobra.Command, args []string) error {
-	res, err := client.CommitSync(ctx)
+	res, err := client.CommitSync(cmd.Context())
 	if err != nil {
 		return err
 	}
@@ -550,7 +552,7 @@ func cmdQuery(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	resQuery, err := client.QuerySync(ctx, types.RequestQuery{
+	resQuery, err := client.QuerySync(cmd.Context(), types.RequestQuery{
 		Data:   queryBytes,
 		Path:   flagPath,
 		Height: uint64(flagHeight),
@@ -574,14 +576,12 @@ func cmdQuery(cmd *cobra.Command, args []string) error {
 }
 
 func cmdKVStore(cmd *cobra.Command, args []string) error {
-	logger := log.Logger("")
-
 	// Create the application - in memory or persisted to disk
 	var app types.Application
 	if flagPersist == "" {
-		app = kvstore.NewApplication()
+		app = kvstore.NewApplication(cmd.Context())
 	} else {
-		app = kvstore.NewPersistentKVStoreApplication(flagPersist)
+		app = kvstore.NewPersistentKVStoreApplication(cmd.Context(), flagPersist)
 		app.(*kvstore.PersistentKVStoreApplication).SetLogger(log.Logger("kvstore"))
 	}
 
@@ -591,26 +591,17 @@ func cmdKVStore(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	readyCh, resultCh := srv.Start(context.Background())
+	ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGTERM)
+	defer cancel()
+
+	readyCh, _ := srv.Start(ctx)
 	if err := <-readyCh; err != nil {
 		return err
 	}
 
-	// Stop upon receiving SIGTERM or CTRL-C.
-	gos.TrapSignal(logger, func() {
-		// Cleanup
-		stopped, err := srv.Stop()
-		if err != nil {
-			logger.Error("Error while stopping server", "err", err)
-		}
-		<-stopped
-		if err := <-resultCh; err != nil {
-			logger.Error("Error while stopping server", "err", err)
-		}
-	})
-
 	// Run forever.
-	select {}
+	<-ctx.Done()
+	return nil
 }
 
 //--------------------------------------------------------------------------------

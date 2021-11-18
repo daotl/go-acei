@@ -2,6 +2,7 @@ package kvstore
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"fmt"
 	"strconv"
@@ -36,17 +37,17 @@ type PersistentKVStoreApplication struct {
 	logger log.StandardLogger
 }
 
-func NewPersistentKVStoreApplication(dbDir string) *PersistentKVStoreApplication {
+func NewPersistentKVStoreApplication(ctx context.Context, dbDir string) *PersistentKVStoreApplication {
 	name := "kvstore"
 	db, err := leveldb.NewDatastore(dbDir+"/"+name, dskey.KeyTypeBytes, nil)
 	if err != nil {
 		panic(err)
 	}
 
-	state := loadState(db)
+	state := loadState(ctx, db)
 
 	return &PersistentKVStoreApplication{
-		app:                &Application{state: state},
+		app:                &Application{ctx: ctx, state: state},
 		valAddrToPubKeyMap: make(map[string]types.PublicKey),
 		logger:             log.NopLogger(),
 	}
@@ -96,7 +97,7 @@ func (app *PersistentKVStoreApplication) Query(reqQuery types.RequestQuery) (res
 	switch reqQuery.Path {
 	case "/val":
 		key := dskey.NewBytesKeyFromString("val:" + string(reqQuery.Data))
-		value, err := app.app.state.ds.Get(bg, key)
+		value, err := app.app.state.ds.Get(app.app.ctx, key)
 		if err != nil {
 			panic(err)
 		}
@@ -175,7 +176,7 @@ func (app *PersistentKVStoreApplication) ApplySnapshotChunk(
 // update validators
 
 func (app *PersistentKVStoreApplication) Validators() (validators []types.ValidatorUpdate) {
-	results, err := app.app.state.ds.Query(bg, dsq.Query{})
+	results, err := app.app.state.ds.Query(app.app.ctx, dsq.Query{})
 	if err != nil {
 		panic(err)
 	}
@@ -252,7 +253,7 @@ func (app *PersistentKVStoreApplication) updateValidator(v types.ValidatorUpdate
 
 	if v.Power == 0 {
 		// remove validator
-		hasKey, err := app.app.state.ds.Has(bg, key)
+		hasKey, err := app.app.state.ds.Has(app.app.ctx, key)
 		if err != nil {
 			panic(err)
 		}
@@ -262,7 +263,7 @@ func (app *PersistentKVStoreApplication) updateValidator(v types.ValidatorUpdate
 				Code: code.CodeTypeUnauthorized,
 				Log:  fmt.Sprintf("Cannot remove non-existent validator %s", pubStr)}
 		}
-		if err = app.app.state.ds.Delete(bg, key); err != nil {
+		if err = app.app.state.ds.Delete(app.app.ctx, key); err != nil {
 			panic(err)
 		}
 		delete(app.valAddrToPubKeyMap, string(pubkey.Address()))
@@ -274,7 +275,7 @@ func (app *PersistentKVStoreApplication) updateValidator(v types.ValidatorUpdate
 				Code: code.CodeTypeEncodingError,
 				Log:  fmt.Sprintf("Error encoding validator: %v", err)}
 		}
-		if err = app.app.state.ds.Put(bg, key, value.Bytes()); err != nil {
+		if err = app.app.state.ds.Put(app.app.ctx, key, value.Bytes()); err != nil {
 			panic(err)
 		}
 		app.valAddrToPubKeyMap[string(pubkey.Address())] = v.PubKey

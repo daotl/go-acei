@@ -1,15 +1,12 @@
 package kvstore
 
 import (
-	"context"
 	mrand "math/rand"
 
 	grand "github.com/daotl/guts/rand"
 
 	"github.com/daotl/go-acei/types"
 )
-
-var bg = context.Background()
 
 // RandVal creates one random validator, with a key derived
 // from the input value

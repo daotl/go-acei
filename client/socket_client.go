@@ -108,7 +108,7 @@ RETRY_CONNECT_LOOP:
 	cli.conn = conn
 
 	go cli.sendRequestsRoutine(ctx, conn)
-	go cli.recvResponseRoutine(conn)
+	go cli.recvResponseRoutine(ctx, conn)
 
 	ready(nil)
 	// Block until stopped
@@ -137,8 +137,8 @@ func (cli *socketClient) Error() error {
 // NOTE: callback may get internally generated flush responses.
 func (cli *socketClient) SetResponseCallback(resCb Callback) {
 	cli.mtx.Lock()
+	defer cli.mtx.Unlock()
 	cli.resCb = resCb
-	cli.mtx.Unlock()
 }
 
 //----------------------------------------
@@ -147,7 +147,13 @@ func (cli *socketClient) sendRequestsRoutine(ctx context.Context, conn io.Writer
 	bw := bufio.NewWriter(conn)
 	for {
 		select {
+		case <-ctx.Done():
+			return
 		case reqres := <-cli.reqQueue:
+			if ctx.Err() != nil {
+				return
+			}
+
 			if reqres.C.Err() != nil {
 				cli.Logger.Debug("Request's context is done", "req", reqres.R, "err", reqres.C.Err())
 				continue
@@ -162,16 +168,16 @@ func (cli *socketClient) sendRequestsRoutine(ctx context.Context, conn io.Writer
 				cli.stopForError(fmt.Errorf("flush buffer: %w", err))
 				return
 			}
-
-		case <-ctx.Done():
-			return
 		}
 	}
 }
 
-func (cli *socketClient) recvResponseRoutine(conn io.Reader) {
+func (cli *socketClient) recvResponseRoutine(ctx context.Context, conn io.Reader) {
 	r := bufio.NewReader(conn)
 	for {
+		if ctx.Err() != nil {
+			return
+		}
 		var res = &types.Response{}
 		err := types.ReadMessage(r, res)
 		if err != nil {

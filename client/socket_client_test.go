@@ -17,34 +17,21 @@ import (
 	"github.com/daotl/go-acei/types"
 )
 
-var ctx = context.Background()
-
 func TestProperSyncCalls(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	app := slowApp{}
 	logger := log.TestingLogger()
 
-	s, c := setupClientServer(t, logger, app)
-	t.Cleanup(func() {
-		if stopped, err := s.Stop(); err != nil {
-			t.Error(err)
-		} else {
-			<-stopped
-		}
-	})
-	t.Cleanup(func() {
-		if stopped, err := c.Stop(); err != nil {
-			t.Error(err)
-		} else {
-			<-stopped
-		}
-	})
+	_, c := setupClientServer(ctx, t, logger, app)
 
 	resp := make(chan error, 1)
 	go func() {
 		// This is BeginBlockSync unrolled....
 		reqres, err := c.BeginBlockAsync(ctx, types.RequestBeginBlock{})
 		assert.NoError(t, err)
-		err = c.FlushSync(context.Background())
+		err = c.FlushSync(ctx)
 		assert.NoError(t, err)
 		res := reqres.Response.GetBeginBlock()
 		assert.NotNil(t, res)
@@ -60,57 +47,8 @@ func TestProperSyncCalls(t *testing.T) {
 	}
 }
 
-func TestHangingSyncCalls(t *testing.T) {
-	app := slowApp{}
-	logger := log.TestingLogger()
-
-	s, c := setupClientServer(t, logger, app)
-	t.Cleanup(func() {
-		if stopped, err := s.Stop(); err != nil {
-			t.Log(err)
-		} else {
-			<-stopped
-		}
-	})
-	t.Cleanup(func() {
-		if stopped, err := c.Stop(); err != nil {
-			t.Log(err)
-		} else {
-			<-stopped
-		}
-	})
-
-	resp := make(chan error, 1)
-	go func() {
-		// Start BeginBlock and flush it
-		reqres, err := c.BeginBlockAsync(ctx, types.RequestBeginBlock{})
-		assert.NoError(t, err)
-		flush, err := c.FlushAsync(ctx)
-		assert.NoError(t, err)
-		// wait 20 ms for all events to travel socket, but
-		// no response yet from server
-		time.Sleep(20 * time.Millisecond)
-		// kill the server, so the connections break
-		stopped, err := s.Stop()
-		assert.NoError(t, err)
-		<-stopped
-
-		// wait for the response from BeginBlock
-		reqres.Wait()
-		flush.Wait()
-		resp <- c.Error()
-	}()
-
-	select {
-	case <-time.After(time.Second):
-		require.Fail(t, "No response arrived")
-	case err, ok := <-resp:
-		require.True(t, ok, "Must not close channel")
-		assert.Error(t, err, "We should get EOF error")
-	}
-}
-
 func setupClientServer(
+	ctx context.Context,
 	t *testing.T,
 	logger log.StandardLogger,
 	app types.Application,
@@ -123,15 +61,25 @@ func setupClientServer(
 
 	s, err := server.NewServer(logger, addr, "socket", app)
 	require.NoError(t, err)
-	readyCh, sResCh := s.Start(context.Background())
+	readyCh, sResCh := s.Start(ctx)
 	require.NoError(t, <-readyCh)
 	go func() { require.NoError(t, <-sResCh) }()
+	t.Cleanup(func() {
+		if stopped, err := s.Stop(); err == nil {
+			<-stopped
+		}
+	})
 
 	c, err := aceiclient.NewSocketClient(logger, addr, true)
 	require.NoError(t, err)
-	readyCh, cResCh := c.Start(context.Background())
+	readyCh, cResCh := c.Start(ctx)
 	require.NoError(t, <-readyCh)
 	go func() { require.NoError(t, <-cResCh) }()
+	t.Cleanup(func() {
+		if stopped, err := c.Stop(); err == nil {
+			<-stopped
+		}
+	})
 
 	return s, c
 }

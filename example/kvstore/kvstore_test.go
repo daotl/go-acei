@@ -10,6 +10,7 @@ import (
 	"github.com/daotl/go-log/v2"
 	ssrv "github.com/daotl/guts/service/suture"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	aceiclient "github.com/daotl/go-acei/client"
 	"github.com/daotl/go-acei/example/code"
@@ -21,8 +22,6 @@ const (
 	testKey   = "abc"
 	testValue = "def"
 )
-
-var ctx = context.Background()
 
 func testKVStore(t *testing.T, app types.Application, tx []byte, key, value string) {
 	req := types.RequestDeliverTx{Tx: tx}
@@ -60,7 +59,10 @@ func testKVStore(t *testing.T, app types.Application, tx []byte, key, value stri
 }
 
 func TestKVStoreKV(t *testing.T) {
-	kvstore := NewApplication()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	kvstore := NewApplication(ctx)
 	key := testKey
 	value := key
 	tx := []byte(key)
@@ -72,11 +74,14 @@ func TestKVStoreKV(t *testing.T) {
 }
 
 func TestPersistentKVStoreKV(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	dir, err := os.MkdirTemp("/tmp", "acei-kvstore-test") // TODO
 	if err != nil {
 		t.Fatal(err)
 	}
-	kvstore := NewPersistentKVStoreApplication(dir)
+	kvstore := NewPersistentKVStoreApplication(ctx, dir)
 	key := testKey
 	value := key
 	tx := []byte(key)
@@ -88,11 +93,14 @@ func TestPersistentKVStoreKV(t *testing.T) {
 }
 
 func TestPersistentKVStoreInfo(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	dir, err := os.MkdirTemp("/tmp", "acei-kvstore-test") // TODO
 	if err != nil {
 		t.Fatal(err)
 	}
-	kvstore := NewPersistentKVStoreApplication(dir)
+	kvstore := NewPersistentKVStoreApplication(ctx, dir)
 	InitKVStore(kvstore)
 	height := uint64(0)
 
@@ -120,11 +128,14 @@ func TestPersistentKVStoreInfo(t *testing.T) {
 
 // add a validator, remove a validator, update a validator
 func TestValUpdates(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	dir, err := os.MkdirTemp("/tmp", "acei-kvstore-test") // TODO
 	if err != nil {
 		t.Fatal(err)
 	}
-	kvstore := NewPersistentKVStoreApplication(dir)
+	kvstore := NewPersistentKVStoreApplication(ctx, dir)
 
 	// init with some validators
 	total := 10
@@ -227,17 +238,26 @@ func valsEqual(t *testing.T, vals1, vals2 []types.ValidatorUpdate) {
 	}
 }
 
-func makeSocketClientServer(app types.Application, name string) (aceiclient.Client, ssrv.Service, error) {
+func makeSocketClientServer(
+	ctx context.Context,
+	t *testing.T,
+	logger *zap.SugaredLogger,
+	app types.Application,
+	name string,
+) (aceiclient.Client, ssrv.Service, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	t.Cleanup(cancel)
+
 	// Start the listener
 	socket := fmt.Sprintf("unix://%s.sock", name)
-	logger := log.TestingLogger()
 
 	server, err := aceiserver.NewSocketServer(logger.With("module", "acei-server"), socket, app)
 	if err != nil {
 		return nil, nil, err
 	}
-	readyCh, sResCh := server.Start(context.Background())
+	readyCh, sResCh := server.Start(ctx)
 	if err := <-readyCh; err != nil {
+		cancel()
 		return nil, nil, err
 	}
 	go func() {
@@ -251,8 +271,9 @@ func makeSocketClientServer(app types.Application, name string) (aceiclient.Clie
 	if err != nil {
 		return nil, nil, err
 	}
-	readyCh, cResCh := client.Start(context.Background())
+	readyCh, cResCh := client.Start(ctx)
 	if <-readyCh != nil {
+		cancel()
 		if stopped, err := server.Stop(); err == nil {
 			<-stopped
 		}
@@ -267,18 +288,27 @@ func makeSocketClientServer(app types.Application, name string) (aceiclient.Clie
 	return client, server, nil
 }
 
-func makeGRPCClientServer(app types.Application, name string) (aceiclient.Client, ssrv.Service, error) {
+func makeGRPCClientServer(
+	ctx context.Context,
+	t *testing.T,
+	logger *zap.SugaredLogger,
+	app types.Application,
+	name string,
+) (aceiclient.Client, ssrv.Service, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	t.Cleanup(cancel)
+
 	// Start the listener
 	socket := fmt.Sprintf("unix://%s.sock", name)
-	logger := log.TestingLogger()
 
 	gapp := types.NewGRPCApplication(app)
-	server, err := aceiserver.NewGRPCServer(logger.With("module", "acei-server"), socket, gapp)
+	server, err := aceiserver.NewGRPCServer(logger.Named("acei-server"), socket, gapp)
 	if err != nil {
 		return nil, nil, err
 	}
-	readyCh, sResCh := server.Start(context.Background())
+	readyCh, sResCh := server.Start(ctx)
 	if err := <-readyCh; err != nil {
+		cancel()
 		return nil, nil, err
 	}
 	go func() {
@@ -287,15 +317,13 @@ func makeGRPCClientServer(app types.Application, name string) (aceiclient.Client
 		}
 	}()
 
-	client, err := aceiclient.NewGRPCClient(logger.With("module", "acei-client"), socket, true)
+	client, err := aceiclient.NewGRPCClient(logger.Named("acei-client"), socket, true)
 	if err != nil {
 		return nil, nil, err
 	}
-	readyCh, cResCh := client.Start(context.Background())
+	readyCh, cResCh := client.Start(ctx)
 	if <-readyCh != nil {
-		if stopped, err := server.Stop(); err == nil {
-			<-stopped
-		}
+		cancel()
 		return nil, nil, err
 	}
 	go func() {
@@ -307,63 +335,59 @@ func makeGRPCClientServer(app types.Application, name string) (aceiclient.Client
 }
 
 func TestClientServer(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	logger := log.TestingLogger()
+
 	// set up socket app
-	kvstore := NewApplication()
-	client, server, err := makeSocketClientServer(kvstore, "kvstore-socket")
+	kvstore := NewApplication(ctx)
+	client, server, err := makeSocketClientServer(ctx, t, logger, kvstore, "kvstore-socket")
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		if stopped, err := server.Stop(); err != nil {
-			t.Error(err)
-		} else {
+		if stopped, err := server.Stop(); err == nil {
 			<-stopped
 		}
 	})
 	t.Cleanup(func() {
-		if stopped, err := client.Stop(); err != nil {
-			t.Error(err)
-		} else {
+		if stopped, err := client.Stop(); err == nil {
 			<-stopped
 		}
 	})
 
-	runClientTests(t, client)
+	runClientTests(ctx, t, client)
 
 	// set up grpc app
-	kvstore = NewApplication()
-	gclient, gserver, err := makeGRPCClientServer(kvstore, "/tmp/kvstore-grpc")
+	kvstore = NewApplication(ctx)
+	gclient, gserver, err := makeGRPCClientServer(ctx, t, logger, kvstore, "/tmp/kvstore-grpc")
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
-		if stopped, err := gserver.Stop(); err != nil {
-			t.Error(err)
-		} else {
+		if stopped, err := gserver.Stop(); err == nil {
 			<-stopped
 		}
 	})
 	t.Cleanup(func() {
-		if stopped, err := gclient.Stop(); err != nil {
-			t.Error(err)
-		} else {
+		if stopped, err := gclient.Stop(); err == nil {
 			<-stopped
 		}
 	})
 
-	runClientTests(t, gclient)
+	runClientTests(ctx, t, gclient)
 }
 
-func runClientTests(t *testing.T, client aceiclient.Client) {
+func runClientTests(ctx context.Context, t *testing.T, client aceiclient.Client) {
 	// run some tests....
 	key := testKey
 	value := key
 	tx := []byte(key)
-	testClient(t, client, tx, key, value)
+	testClient(ctx, t, client, tx, key, value)
 
 	value = testValue
 	tx = []byte(key + "=" + value)
-	testClient(t, client, tx, key, value)
+	testClient(ctx, t, client, tx, key, value)
 }
 
-func testClient(t *testing.T, app aceiclient.Client, tx []byte, key, value string) {
+func testClient(ctx context.Context, t *testing.T, app aceiclient.Client, tx []byte, key, value string) {
 	ar, err := app.DeliverTxSync(ctx, types.RequestDeliverTx{Tx: tx})
 	require.NoError(t, err)
 	require.False(t, ar.IsErr(), ar)
