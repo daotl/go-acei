@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	dstore "github.com/daotl/go-datastore"
+	"github.com/daotl/go-datastore"
 	"github.com/daotl/go-datastore/key"
 
 	"github.com/daotl/go-acei/example/code"
@@ -22,17 +22,17 @@ var (
 )
 
 type State struct {
-	ds      dstore.Datastore
+	ds      datastore.Datastore
 	Size    int64  `json:"size"`
 	Height  uint64 `json:"height"`
 	AppHash []byte `json:"app_hash"`
 }
 
-func loadState(ds dstore.Datastore) State {
+func loadState(ds datastore.Datastore) State {
 	var state State
 	state.ds = ds
 	stateBytes, err := ds.Get(bg, stateKey)
-	if err != nil && err != dstore.ErrNotFound {
+	if err != nil && err != datastore.ErrNotFound {
 		panic(err)
 	}
 	if len(stateBytes) == 0 {
@@ -72,7 +72,7 @@ type Application struct {
 }
 
 func NewApplication() *Application {
-	d, err := dstore.NewMapDatastore(key.KeyTypeBytes)
+	d, err := datastore.NewMapDatastore(key.KeyTypeBytes)
 	if err != nil {
 		panic(err)
 	}
