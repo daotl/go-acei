@@ -52,10 +52,13 @@ func (cli *localClient) run(ctx context.Context, ready func(error)) error {
 	return nil
 }
 
+func (*localClient) OnStart(context.Context) error { return nil }
+func (*localClient) OnStop()                       {}
+
 func (app *localClient) SetResponseCallback(cb Callback) {
 	app.mtx.Lock()
+	defer app.mtx.Unlock()
 	app.Callback = cb
-	app.mtx.Unlock()
 }
 
 // TODO: change types.Application to include Error()?
