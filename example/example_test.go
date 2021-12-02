@@ -68,9 +68,7 @@ func testStream(ctx context.Context, t *testing.T, app types.Application) {
 	err = <-server.Ready()
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		if stopped, err := server.Stop(); err != nil {
-			t.Error(err)
-		} else {
+		if stopped, err := server.Stop(); err == nil {
 			<-stopped
 		}
 	})

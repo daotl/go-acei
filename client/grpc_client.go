@@ -97,12 +97,19 @@ func (cli *grpcClient) run(ctx context.Context, ready func(error)) error {
 				cb(reqres.Response)
 			}
 		}
-		for reqres := range cli.chReqRes {
-			if reqres != nil {
-				callCb(reqres)
-			} else {
-				cli.Logger.Error("Received nil reqres")
+
+		for {
+			select {
+			case reqres := <-cli.chReqRes:
+				if reqres != nil {
+					callCb(reqres)
+				} else {
+					cli.Logger.Error("Received nil reqres")
+				}
+			case <-ctx.Done():
+				return
 			}
+
 		}
 	}()
 

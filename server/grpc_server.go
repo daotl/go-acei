@@ -55,8 +55,13 @@ func (s *GRPCServer) run(ctx context.Context, ready func(error)) error {
 	s.server = grpc.NewServer()
 	types.RegisterACEIApplicationServer(s.server, s.app)
 
+	s.Logger.Info("Listening", "proto", s.proto, "addr", s.addr)
 	go func() {
-		s.Logger.Info("Listening", "proto", s.proto, "addr", s.addr)
+		go func() {
+			<-ctx.Done()
+			s.server.GracefulStop()
+		}()
+
 		if err := s.server.Serve(s.listener); err != nil {
 			s.Logger.Error("Error serving gRPC server", "err", err)
 		}
