@@ -8,22 +8,29 @@ import (
 	mrand "math/rand"
 
 	grand "github.com/daotl/guts/rand"
+	"github.com/gogo/protobuf/proto"
 
 	aceiclient "github.com/daotl/go-acei/client"
 	"github.com/daotl/go-acei/types"
+	"github.com/daotl/go-acei/types/consensus/tendermint"
 )
 
 func InitLedger(ctx context.Context, client aceiclient.Client) error {
 	total := 10
-	vals := make([]types.ValidatorUpdate, total)
+	vals := make([]tendermint.ValidatorUpdate, total)
 	for i := 0; i < total; i++ {
 		pubkey := grand.Bytes(33)
 		// nolint:gosec // G404: Use of weak random number generator
 		power := mrand.Int()
-		vals[i] = types.UpdateValidator(pubkey, int64(power), "")
+		vals[i] = tendermint.UpdateValidator(pubkey, int64(power), "")
 	}
-	_, err := client.InitLedgerSync(ctx, types.RequestInitLedger{
-		Validators: vals,
+	extra := &tendermint.RequestInitLedgerExtra{Validators: vals}
+	ebin, err := proto.Marshal(extra)
+	if err != nil {
+		return err
+	}
+	_, err = client.InitLedgerSync(ctx, types.RequestInitLedger{
+		Extra: ebin,
 	})
 	if err != nil {
 		fmt.Printf("Failed test: InitLedger - %v\n", err)

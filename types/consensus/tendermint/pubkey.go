@@ -1,4 +1,4 @@
-package types
+package tendermint
 
 import (
 	"fmt"
@@ -7,6 +7,8 @@ import (
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/crypto/secp256k1"
 	"github.com/tendermint/tendermint/crypto/sr25519"
+
+	"github.com/daotl/go-acei/types"
 )
 
 /* -- Tendermint -- */
@@ -56,24 +58,24 @@ func UpdateValidator(pk []byte, power int64, keyType string) ValidatorUpdate {
 
 // From: https://github.com/tendermint/tendermint/blob/8441b3715aff9dbfcb9cbe29ebc2f53e7cd910d3/crypto/encoding/codec.go#L20
 // PubKeyToProto takes PubKey and transforms it to a protobuf Pubkey
-func PubKeyToProto(k crypto.PubKey) (PublicKey, error) {
-	var kp PublicKey
+func PubKeyToProto(k crypto.PubKey) (types.PublicKey, error) {
+	var kp types.PublicKey
 	switch k := k.(type) {
 	case ed25519.PubKey:
-		kp = PublicKey{
-			Sum: &PublicKey_Ed25519{
+		kp = types.PublicKey{
+			Sum: &types.PublicKey_Ed25519{
 				Ed25519: k,
 			},
 		}
 	case secp256k1.PubKey:
-		kp = PublicKey{
-			Sum: &PublicKey_Secp256K1{
+		kp = types.PublicKey{
+			Sum: &types.PublicKey_Secp256K1{
 				Secp256K1: k,
 			},
 		}
 	case sr25519.PubKey:
-		kp = PublicKey{
-			Sum: &PublicKey_Sr25519{
+		kp = types.PublicKey{
+			Sum: &types.PublicKey_Sr25519{
 				Sr25519: k,
 			},
 		}

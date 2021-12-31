@@ -12,10 +12,12 @@ import (
 	dsq "github.com/daotl/go-datastore/query"
 	leveldb "github.com/daotl/go-ds-leveldb"
 	"github.com/daotl/go-log/v2"
+	"github.com/gogo/protobuf/proto"
 
 	"github.com/daotl/go-acei/crypto/encoding"
 	"github.com/daotl/go-acei/example/code"
 	"github.com/daotl/go-acei/types"
+	"github.com/daotl/go-acei/types/consensus/tendermint"
 )
 
 const (
@@ -30,7 +32,7 @@ type PersistentKVStoreApplication struct {
 	app *Application
 
 	// validator set
-	ValUpdates []types.ValidatorUpdate
+	ValUpdates []tendermint.ValidatorUpdate
 
 	valAddrToPubKeyMap map[string]types.PublicKey
 
@@ -91,7 +93,8 @@ func (app *PersistentKVStoreApplication) Commit() types.ResponseCommit {
 	return app.app.Commit()
 }
 
-// When path=/val and data={validator address}, returns the validator update (types.ValidatorUpdate) varint encoded.
+// When path=/val and data={validator address}, returns the validator update (tendermint.
+//ValidatorUpdate) varint encoded.
 // For any other path, returns an associated value or nil if missing.
 func (app *PersistentKVStoreApplication) Query(reqQuery types.RequestQuery) (resQuery types.ResponseQuery) {
 	switch reqQuery.Path {
@@ -112,10 +115,15 @@ func (app *PersistentKVStoreApplication) Query(reqQuery types.RequestQuery) (res
 
 // Save the validators in the merkle tree
 func (app *PersistentKVStoreApplication) InitLedger(req types.RequestInitLedger) types.ResponseInitLedger {
-	for _, v := range req.Validators {
-		r := app.updateValidator(v)
-		if r.IsErr() {
-			app.logger.Error("Error updating validators", "r", r)
+	extra := &tendermint.RequestInitLedgerExtra{}
+	if proto.Unmarshal(req.Extra, extra) != nil {
+		app.logger.Error("Error decoding extra data for Tendermint")
+	} else {
+		for _, v := range extra.Validators {
+			r := app.updateValidator(v)
+			if r.IsErr() {
+				app.logger.Error("Error updating validators", "r", r)
+			}
 		}
 	}
 	return types.ResponseInitLedger{}
@@ -124,22 +132,27 @@ func (app *PersistentKVStoreApplication) InitLedger(req types.RequestInitLedger)
 // Track the block hash and header information
 func (app *PersistentKVStoreApplication) BeginBlock(req types.RequestBeginBlock) types.ResponseBeginBlock {
 	// reset valset changes
-	app.ValUpdates = make([]types.ValidatorUpdate, 0)
+	app.ValUpdates = make([]tendermint.ValidatorUpdate, 0)
 
 	// Punish validators who committed equivocation.
-	for _, ev := range req.ByzantineValidators {
-		if ev.Type == types.EvidenceType_DUPLICATE_VOTE {
-			addr := string(ev.Validator.Address)
-			if pubKey, ok := app.valAddrToPubKeyMap[addr]; ok {
-				app.updateValidator(types.ValidatorUpdate{
-					PubKey: pubKey,
-					Power:  ev.Validator.Power - 1,
-				})
-				app.logger.Info("Decreased val power by 1 because of the equivocation",
-					"val", addr)
-			} else {
-				app.logger.Error("Wanted to punish val, but can't find it",
-					"val", addr)
+	extra := &tendermint.RequestBeginBlockExtra{}
+	if err := proto.Unmarshal(req.Extra, extra); err != nil {
+		app.logger.Error("Error decoding extra data for Tendermint")
+	} else {
+		for _, ev := range extra.ByzantineValidators {
+			if ev.Type == tendermint.EvidenceType_DUPLICATE_VOTE {
+				addr := string(ev.Validator.Address)
+				if pubKey, ok := app.valAddrToPubKeyMap[addr]; ok {
+					app.updateValidator(tendermint.ValidatorUpdate{
+						PubKey: pubKey,
+						Power:  ev.Validator.Power - 1,
+					})
+					app.logger.Info("Decreased val power by 1 because of the equivocation",
+						"val", addr)
+				} else {
+					app.logger.Error("Wanted to punish val, but can't find it",
+						"val", addr)
+				}
 			}
 		}
 	}
@@ -149,7 +162,12 @@ func (app *PersistentKVStoreApplication) BeginBlock(req types.RequestBeginBlock)
 
 // Update the validator set
 func (app *PersistentKVStoreApplication) EndBlock(req types.RequestEndBlock) types.ResponseEndBlock {
-	return types.ResponseEndBlock{ValidatorUpdates: app.ValUpdates}
+	extra := &tendermint.ResponseEndBlockExtra{ValidatorUpdates: app.ValUpdates}
+	ebin, err := proto.Marshal(extra)
+	if err != nil {
+		panic(err)
+	}
+	return types.ResponseEndBlock{Extra: ebin}
 }
 
 func (app *PersistentKVStoreApplication) ListSnapshots(
@@ -175,14 +193,14 @@ func (app *PersistentKVStoreApplication) ApplySnapshotChunk(
 //---------------------------------------------
 // update validators
 
-func (app *PersistentKVStoreApplication) Validators() (validators []types.ValidatorUpdate) {
+func (app *PersistentKVStoreApplication) Validators() (validators []tendermint.ValidatorUpdate) {
 	results, err := app.app.state.ds.Query(app.app.ctx, dsq.Query{})
 	if err != nil {
 		panic(err)
 	}
 	for r := range results.Next() {
 		if isValidatorTx(r.Key.Bytes()) {
-			validator := new(types.ValidatorUpdate)
+			validator := new(tendermint.ValidatorUpdate)
 			err := types.ReadMessage(bytes.NewBuffer(r.Value), validator)
 			if err != nil {
 				panic(err)
@@ -240,11 +258,12 @@ func (app *PersistentKVStoreApplication) execValidatorTx(tx []byte) types.Respon
 	}
 
 	// update
-	return app.updateValidator(types.UpdateValidator(pubkey, power, ""))
+	return app.updateValidator(tendermint.UpdateValidator(pubkey, power, ""))
 }
 
 // add, update, or remove a validator
-func (app *PersistentKVStoreApplication) updateValidator(v types.ValidatorUpdate) types.ResponseDeliverTx {
+func (app *PersistentKVStoreApplication) updateValidator(v tendermint.ValidatorUpdate,
+) types.ResponseDeliverTx {
 	pubkey, err := encoding.PubKeyFromProto(v.PubKey)
 	if err != nil {
 		panic(fmt.Errorf("can't decode public key: %w", err))

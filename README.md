@@ -21,7 +21,28 @@ run in [acei/proto](https://github.com/daotl/acei) directory:
 ```sh
 protoc --gogofaster_out=. --go-grpc_out=. \
   -I=${GOPATH}/pkg/mod/google.golang.org/protobuf@v1.27.1/types/known/emptypb \
-  -I=${GOPATH}/pkg/mod/github.com/gogo/protobuf@v1.3.2 -I=. ./daotl/acei/*.proto
+  -I=${GOPATH}/pkg/mod/github.com/gogo/protobuf@v1.3.2 -I=. \
+  ./daotl/acei/*.proto
+
+protoc --gogofaster_out=. --go-grpc_out=. \
+  -I=${GOPATH}/pkg/mod/google.golang.org/protobuf@v1.27.1/types/known/emptypb \
+  -I=${GOPATH}/pkg/mod/github.com/gogo/protobuf@v1.3.2 -I=. \
+  ./daotl/acei/*.proto \
+  ./daotl/acei/consensus/tendermint/*.proto
+```
+
+Or on Windows:
+```bat
+protoc --gogofaster_out=. --go-grpc_out=. ^
+  -I=%GOPATH%/pkg/mod/google.golang.org/protobuf@v1.27.1/types/known/emptypb ^
+  -I=%GOPATH%/pkg/mod/github.com/gogo/protobuf@v1.3.2 -I=. ^
+  ./daotl/acei/*.proto
+  
+protoc --gogofaster_out=. --go-grpc_out=. ^
+  -I=%GOPATH%/pkg/mod/google.golang.org/protobuf@v1.27.1/types/known/emptypb ^
+  -I=%GOPATH%/pkg/mod/github.com/gogo/protobuf@v1.3.2 -I=. ^
+  ./daotl/acei/consensus/tendermint/*.proto
+```
 
 See `protoc --help` and [the Protocol Buffers site](https://developers.google.com/protocol-buffers)
 for details on compiling for other languages. Note we also include a [GRPC](https://www.grpc.io/docs)

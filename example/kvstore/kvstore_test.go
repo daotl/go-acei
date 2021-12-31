@@ -9,6 +9,7 @@ import (
 
 	"github.com/daotl/go-log/v2"
 	ssrv "github.com/daotl/guts/service/suture"
+	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/daotl/go-acei/example/code"
 	aceiserver "github.com/daotl/go-acei/server"
 	"github.com/daotl/go-acei/types"
+	"github.com/daotl/go-acei/types/consensus/tendermint"
 )
 
 const (
@@ -142,18 +144,23 @@ func TestValUpdates(t *testing.T) {
 	nInit := 5
 	vals := RandVals(total)
 	// initialize with the first nInit
+	extra := &tendermint.RequestInitLedgerExtra{Validators: vals[:nInit]}
+	ebin, err := proto.Marshal(extra)
+	if err != nil {
+		panic(err)
+	}
 	kvstore.InitLedger(types.RequestInitLedger{
-		Validators: vals[:nInit],
+		Extra: ebin,
 	})
 
 	vals1, vals2 := vals[:nInit], kvstore.Validators()
 	valsEqual(t, vals1, vals2)
 
-	var v1, v2, v3 types.ValidatorUpdate
+	var v1, v2, v3 tendermint.ValidatorUpdate
 
 	// add some validators
 	v1, v2 = vals[nInit], vals[nInit+1]
-	diff := []types.ValidatorUpdate{v1, v2}
+	diff := []tendermint.ValidatorUpdate{v1, v2}
 	tx1 := MakeValSetChangeTx(v1.PubKey, v1.Power)
 	tx2 := MakeValSetChangeTx(v2.PubKey, v2.Power)
 
@@ -167,7 +174,7 @@ func TestValUpdates(t *testing.T) {
 	v1.Power = 0
 	v2.Power = 0
 	v3.Power = 0
-	diff = []types.ValidatorUpdate{v1, v2, v3}
+	diff = []tendermint.ValidatorUpdate{v1, v2, v3}
 	tx1 = MakeValSetChangeTx(v1.PubKey, v1.Power)
 	tx2 = MakeValSetChangeTx(v2.PubKey, v2.Power)
 	tx3 := MakeValSetChangeTx(v3.PubKey, v3.Power)
@@ -185,12 +192,12 @@ func TestValUpdates(t *testing.T) {
 	} else {
 		v1.Power = 5
 	}
-	diff = []types.ValidatorUpdate{v1}
+	diff = []tendermint.ValidatorUpdate{v1}
 	tx1 = MakeValSetChangeTx(v1.PubKey, v1.Power)
 
 	makeApplyBlock(t, kvstore, 3, diff, tx1)
 
-	vals1 = append([]types.ValidatorUpdate{v1}, vals1[1:]...)
+	vals1 = append([]tendermint.ValidatorUpdate{v1}, vals1[1:]...)
 	vals2 = kvstore.Validators()
 	valsEqual(t, vals1, vals2)
 
@@ -200,7 +207,7 @@ func makeApplyBlock(
 	t *testing.T,
 	kvstore types.Application,
 	heightInt int,
-	diff []types.ValidatorUpdate,
+	diff []tendermint.ValidatorUpdate,
 	txs ...[]byte) {
 	// make and apply block
 	height := uint64(heightInt)
@@ -218,17 +225,22 @@ func makeApplyBlock(
 	resEndBlock := kvstore.EndBlock(types.RequestEndBlock{Height: header.Height})
 	kvstore.Commit()
 
-	valsEqual(t, diff, resEndBlock.ValidatorUpdates)
+	extra := &tendermint.ResponseEndBlockExtra{}
+	if err := proto.Unmarshal(resEndBlock.Extra, extra); err != nil {
+		panic(err)
+	}
+
+	valsEqual(t, diff, extra.ValidatorUpdates)
 
 }
 
 // order doesn't matter
-func valsEqual(t *testing.T, vals1, vals2 []types.ValidatorUpdate) {
+func valsEqual(t *testing.T, vals1, vals2 []tendermint.ValidatorUpdate) {
 	if len(vals1) != len(vals2) {
 		t.Fatalf("vals dont match in len. got %d, expected %d", len(vals2), len(vals1))
 	}
-	sort.Sort(types.ValidatorUpdates(vals1))
-	sort.Sort(types.ValidatorUpdates(vals2))
+	sort.Sort(tendermint.ValidatorUpdates(vals1))
+	sort.Sort(tendermint.ValidatorUpdates(vals2))
 	for i, v1 := range vals1 {
 		v2 := vals2[i]
 		if !v1.PubKey.Equal(v2.PubKey) ||
