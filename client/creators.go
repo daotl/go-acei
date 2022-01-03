@@ -6,18 +6,21 @@ import (
 	"github.com/daotl/go-log/v2"
 	gsync "github.com/daotl/guts/sync"
 
-	"github.com/daotl/go-acei/types"
+	"github.com/daotl/go-acei/types/local"
 )
 
 // Creator creates new ACEI clients.
 type Creator func(log.StandardLogger) (Client, error)
 
-// NewLocalCreator returns a Creator for the given app,
+// LocalCreator creates new local ACEI clients.
+type LocalCreator func(log.StandardLogger) (LocalClient, error)
+
+// NewLocalCreator returns a Creator for the given Application,
 // which will be running locally.
-func NewLocalCreator(logger log.StandardLogger, app types.Application) Creator {
+func NewLocalCreator(logger log.StandardLogger, app local.Application) LocalCreator {
 	mtx := new(gsync.Mutex)
 
-	return func(log.StandardLogger) (Client, error) {
+	return func(log.StandardLogger) (LocalClient, error) {
 		return NewLocalClient(logger, mtx, app)
 	}
 }

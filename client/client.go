@@ -10,6 +10,7 @@ import (
 	gsync "github.com/daotl/guts/sync"
 
 	"github.com/daotl/go-acei/types"
+	"github.com/daotl/go-acei/types/local"
 )
 
 const (
@@ -64,6 +65,34 @@ type Client interface {
 	OfferSnapshotSync(context.Context, types.RequestOfferSnapshot) (*types.ResponseOfferSnapshot, error)
 	LoadSnapshotChunkSync(context.Context, types.RequestLoadSnapshotChunk) (*types.ResponseLoadSnapshotChunk, error)
 	ApplySnapshotChunkSync(context.Context, types.RequestApplySnapshotChunk) (*types.ResponseApplySnapshotChunk, error)
+}
+
+// LocalClient interface is a process-local version of the Client interface.
+//
+// All methods take a pointer argument and return a pointer to avoid copying, some
+// methods also take a RequestNativeXxx argument and/or return a ResponseNativeXxx
+// argument, which directly use Go-native types form go-doubl instead of corresponding
+// Protocol Buffers types.
+//
+// Application-related errors are reflected in response via ACEI error codes
+// and logs.
+type LocalClient interface {
+	Error() error
+
+	Flush(context.Context)
+	Echo(ctx context.Context, msg string) *types.ResponseEcho
+	Info(context.Context, *types.RequestInfo) *types.ResponseInfo
+	DeliverTx(context.Context, *local.RequestNativeDeliverTx) *types.ResponseDeliverTx
+	CheckTx(context.Context, *local.RequestNativeCheckTx) *local.ResponseNativeCheckTx
+	Query(context.Context, *types.RequestQuery) *types.ResponseQuery
+	Commit(context.Context) *types.ResponseCommit
+	InitLedger(context.Context, *types.RequestInitLedger) *types.ResponseInitLedger
+	BeginBlock(context.Context, *local.RequestNativeBeginBlock) *types.ResponseBeginBlock
+	EndBlock(context.Context, *types.RequestEndBlock) *local.ResponseNativeEndBlock
+	ListSnapshots(context.Context, *types.RequestListSnapshots) *types.ResponseListSnapshots
+	OfferSnapshot(context.Context, *types.RequestOfferSnapshot) *types.ResponseOfferSnapshot
+	LoadSnapshotChunk(context.Context, *types.RequestLoadSnapshotChunk) *types.ResponseLoadSnapshotChunk
+	ApplySnapshotChunk(context.Context, *types.RequestApplySnapshotChunk) *types.ResponseApplySnapshotChunk
 }
 
 //----------------------------------------

@@ -8,6 +8,7 @@ import (
 	gsync "github.com/daotl/guts/sync"
 
 	"github.com/daotl/go-acei/types"
+	"github.com/daotl/go-acei/types/local"
 )
 
 // NOTE: use defer to unlock mutex because Application might panic (e.g., in
@@ -18,17 +19,17 @@ type localClient struct {
 	*ssrv.BaseService
 
 	mtx *gsync.Mutex
-	types.Application
+	local.Application
 	Callback
 }
 
-var _ Client = (*localClient)(nil)
+var _ LocalClient = (*localClient)(nil)
 
 // NewLocalClient creates a local client, which will be directly calling the
 // methods of the given app.
 //
 // Both Async and Sync methods ignore the given context.Context parameter.
-func NewLocalClient(logger log.StandardLogger, mtx *gsync.Mutex, app types.Application,
+func NewLocalClient(logger log.StandardLogger, mtx *gsync.Mutex, app local.Application,
 ) (*localClient, error) {
 	if mtx == nil {
 		mtx = new(gsync.Mutex)
@@ -52,325 +53,109 @@ func (cli *localClient) run(ctx context.Context, ready func(error)) error {
 	return nil
 }
 
-func (*localClient) OnStart(context.Context) error { return nil }
-func (*localClient) OnStop()                       {}
-
-func (app *localClient) SetResponseCallback(cb Callback) {
-	app.mtx.Lock()
-	defer app.mtx.Unlock()
-	app.Callback = cb
-}
-
 // TODO: change types.Application to include Error()?
 func (app *localClient) Error() error {
 	return nil
 }
 
-func (app *localClient) FlushAsync(ctx context.Context) (*ReqRes, error) {
-	// Do nothing
-	return newLocalReqRes(types.ToRequestFlush(), nil), nil
+func (app *localClient) Flush(ctx context.Context) {
+	return
 }
 
-func (app *localClient) EchoAsync(ctx context.Context, msg string) (*ReqRes, error) {
+func (app *localClient) Echo(ctx context.Context, msg string) *types.ResponseEcho {
+	return &types.ResponseEcho{Message: msg}
+}
+
+func (app *localClient) Info(ctx context.Context, req *types.RequestInfo) *types.ResponseInfo {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	return app.callback(
-		types.ToRequestEcho(msg),
-		types.ToResponseEcho(msg),
-	), nil
+	return app.Application.Info(req)
 }
 
-func (app *localClient) InfoAsync(ctx context.Context, req types.RequestInfo) (*ReqRes, error) {
+func (app *localClient) DeliverTx(ctx context.Context, req *local.RequestNativeDeliverTx,
+) *types.ResponseDeliverTx {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	res := app.Application.Info(req)
-	return app.callback(
-		types.ToRequestInfo(req),
-		types.ToResponseInfo(res),
-	), nil
+	return app.Application.DeliverTx(req)
 }
 
-func (app *localClient) DeliverTxAsync(ctx context.Context, params types.RequestDeliverTx) (*ReqRes, error) {
+func (app *localClient) CheckTx(ctx context.Context, req *local.RequestNativeCheckTx,
+) *local.ResponseNativeCheckTx {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	res := app.Application.DeliverTx(params)
-	return app.callback(
-		types.ToRequestDeliverTx(params),
-		types.ToResponseDeliverTx(res),
-	), nil
+	return app.Application.CheckTx(req)
 }
 
-func (app *localClient) CheckTxAsync(ctx context.Context, req types.RequestCheckTx) (*ReqRes, error) {
+func (app *localClient) Query(ctx context.Context, req *types.RequestQuery,
+) *types.ResponseQuery {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	res := app.Application.CheckTx(req)
-	return app.callback(
-		types.ToRequestCheckTx(req),
-		types.ToResponseCheckTx(res),
-	), nil
+	return app.Application.Query(req)
 }
 
-func (app *localClient) QueryAsync(ctx context.Context, req types.RequestQuery) (*ReqRes, error) {
+func (app *localClient) Commit(ctx context.Context) *types.ResponseCommit {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	res := app.Application.Query(req)
-	return app.callback(
-		types.ToRequestQuery(req),
-		types.ToResponseQuery(res),
-	), nil
+	return app.Application.Commit()
 }
 
-func (app *localClient) CommitAsync(ctx context.Context) (*ReqRes, error) {
+func (app *localClient) InitLedger(ctx context.Context, req *types.RequestInitLedger,
+) *types.ResponseInitLedger {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	res := app.Application.Commit()
-	return app.callback(
-		types.ToRequestCommit(),
-		types.ToResponseCommit(res),
-	), nil
+	return app.Application.InitLedger(req)
 }
 
-func (app *localClient) InitLedgerAsync(ctx context.Context, req types.RequestInitLedger) (*ReqRes, error) {
+func (app *localClient) BeginBlock(ctx context.Context, req *local.RequestNativeBeginBlock,
+) *types.ResponseBeginBlock {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	res := app.Application.InitLedger(req)
-	return app.callback(
-		types.ToRequestInitLedger(req),
-		types.ToResponseInitLedger(res),
-	), nil
+	return app.Application.BeginBlock(req)
 }
 
-func (app *localClient) BeginBlockAsync(ctx context.Context, req types.RequestBeginBlock) (*ReqRes, error) {
+func (app *localClient) EndBlock(ctx context.Context, req *types.RequestEndBlock,
+) *local.ResponseNativeEndBlock {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	res := app.Application.BeginBlock(req)
-	return app.callback(
-		types.ToRequestBeginBlock(req),
-		types.ToResponseBeginBlock(res),
-	), nil
+	return app.Application.EndBlock(req)
 }
 
-func (app *localClient) EndBlockAsync(ctx context.Context, req types.RequestEndBlock) (*ReqRes, error) {
+func (app *localClient) ListSnapshots(ctx context.Context, req *types.RequestListSnapshots,
+) *types.ResponseListSnapshots {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	res := app.Application.EndBlock(req)
-	return app.callback(
-		types.ToRequestEndBlock(req),
-		types.ToResponseEndBlock(res),
-	), nil
+	return app.Application.ListSnapshots(req)
 }
 
-func (app *localClient) ListSnapshotsAsync(ctx context.Context, req types.RequestListSnapshots) (*ReqRes, error) {
+func (app *localClient) OfferSnapshot(ctx context.Context, req *types.RequestOfferSnapshot,
+) *types.ResponseOfferSnapshot {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	res := app.Application.ListSnapshots(req)
-	return app.callback(
-		types.ToRequestListSnapshots(req),
-		types.ToResponseListSnapshots(res),
-	), nil
+	return app.Application.OfferSnapshot(req)
 }
 
-func (app *localClient) OfferSnapshotAsync(ctx context.Context, req types.RequestOfferSnapshot) (*ReqRes, error) {
+func (app *localClient) LoadSnapshotChunk(ctx context.Context, req *types.RequestLoadSnapshotChunk,
+) *types.ResponseLoadSnapshotChunk {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	res := app.Application.OfferSnapshot(req)
-	return app.callback(
-		types.ToRequestOfferSnapshot(req),
-		types.ToResponseOfferSnapshot(res),
-	), nil
+	return app.Application.LoadSnapshotChunk(req)
 }
 
-func (app *localClient) LoadSnapshotChunkAsync(
-	ctx context.Context,
-	req types.RequestLoadSnapshotChunk,
-) (*ReqRes, error) {
+func (app *localClient) ApplySnapshotChunk(ctx context.Context, req *types.RequestApplySnapshotChunk,
+) *types.ResponseApplySnapshotChunk {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	res := app.Application.LoadSnapshotChunk(req)
-	return app.callback(
-		types.ToRequestLoadSnapshotChunk(req),
-		types.ToResponseLoadSnapshotChunk(res),
-	), nil
-}
-
-func (app *localClient) ApplySnapshotChunkAsync(
-	ctx context.Context,
-	req types.RequestApplySnapshotChunk,
-) (*ReqRes, error) {
-	app.mtx.Lock()
-	defer app.mtx.Unlock()
-
-	res := app.Application.ApplySnapshotChunk(req)
-	return app.callback(
-		types.ToRequestApplySnapshotChunk(req),
-		types.ToResponseApplySnapshotChunk(res),
-	), nil
-}
-
-//-------------------------------------------------------
-
-func (app *localClient) FlushSync(ctx context.Context) error {
-	return nil
-}
-
-func (app *localClient) EchoSync(ctx context.Context, msg string) (*types.ResponseEcho, error) {
-	return &types.ResponseEcho{Message: msg}, nil
-}
-
-func (app *localClient) InfoSync(ctx context.Context, req types.RequestInfo) (*types.ResponseInfo, error) {
-	app.mtx.Lock()
-	defer app.mtx.Unlock()
-
-	res := app.Application.Info(req)
-	return &res, nil
-}
-
-func (app *localClient) DeliverTxSync(
-	ctx context.Context,
-	req types.RequestDeliverTx,
-) (*types.ResponseDeliverTx, error) {
-
-	app.mtx.Lock()
-	defer app.mtx.Unlock()
-
-	res := app.Application.DeliverTx(req)
-	return &res, nil
-}
-
-func (app *localClient) CheckTxSync(
-	ctx context.Context,
-	req types.RequestCheckTx,
-) (*types.ResponseCheckTx, error) {
-	app.mtx.Lock()
-	defer app.mtx.Unlock()
-
-	res := app.Application.CheckTx(req)
-	return &res, nil
-}
-
-func (app *localClient) QuerySync(
-	ctx context.Context,
-	req types.RequestQuery,
-) (*types.ResponseQuery, error) {
-	app.mtx.Lock()
-	defer app.mtx.Unlock()
-
-	res := app.Application.Query(req)
-	return &res, nil
-}
-
-func (app *localClient) CommitSync(ctx context.Context) (*types.ResponseCommit, error) {
-	app.mtx.Lock()
-	defer app.mtx.Unlock()
-
-	res := app.Application.Commit()
-	return &res, nil
-}
-
-func (app *localClient) InitLedgerSync(
-	ctx context.Context,
-	req types.RequestInitLedger,
-) (*types.ResponseInitLedger, error) {
-
-	app.mtx.Lock()
-	defer app.mtx.Unlock()
-
-	res := app.Application.InitLedger(req)
-	return &res, nil
-}
-
-func (app *localClient) BeginBlockSync(
-	ctx context.Context,
-	req types.RequestBeginBlock,
-) (*types.ResponseBeginBlock, error) {
-
-	app.mtx.Lock()
-	defer app.mtx.Unlock()
-
-	res := app.Application.BeginBlock(req)
-	return &res, nil
-}
-
-func (app *localClient) EndBlockSync(
-	ctx context.Context,
-	req types.RequestEndBlock,
-) (*types.ResponseEndBlock, error) {
-
-	app.mtx.Lock()
-	defer app.mtx.Unlock()
-
-	res := app.Application.EndBlock(req)
-	return &res, nil
-}
-
-func (app *localClient) ListSnapshotsSync(
-	ctx context.Context,
-	req types.RequestListSnapshots,
-) (*types.ResponseListSnapshots, error) {
-
-	app.mtx.Lock()
-	defer app.mtx.Unlock()
-
-	res := app.Application.ListSnapshots(req)
-	return &res, nil
-}
-
-func (app *localClient) OfferSnapshotSync(
-	ctx context.Context,
-	req types.RequestOfferSnapshot,
-) (*types.ResponseOfferSnapshot, error) {
-
-	app.mtx.Lock()
-	defer app.mtx.Unlock()
-
-	res := app.Application.OfferSnapshot(req)
-	return &res, nil
-}
-
-func (app *localClient) LoadSnapshotChunkSync(
-	ctx context.Context,
-	req types.RequestLoadSnapshotChunk) (*types.ResponseLoadSnapshotChunk, error) {
-
-	app.mtx.Lock()
-	defer app.mtx.Unlock()
-
-	res := app.Application.LoadSnapshotChunk(req)
-	return &res, nil
-}
-
-func (app *localClient) ApplySnapshotChunkSync(
-	ctx context.Context,
-	req types.RequestApplySnapshotChunk) (*types.ResponseApplySnapshotChunk, error) {
-
-	app.mtx.Lock()
-	defer app.mtx.Unlock()
-
-	res := app.Application.ApplySnapshotChunk(req)
-	return &res, nil
-}
-
-//-------------------------------------------------------
-
-func (app *localClient) callback(req *types.Request, res *types.Response) *ReqRes {
-	app.Callback(req, res)
-	return newLocalReqRes(req, res)
-}
-
-func newLocalReqRes(req *types.Request, res *types.Response) *ReqRes {
-	reqRes := NewReqRes(req)
-	reqRes.Response = res
-	reqRes.SetDone()
-	return reqRes
+	return app.Application.ApplySnapshotChunk(req)
 }
