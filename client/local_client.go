@@ -58,104 +58,104 @@ func (app *localClient) Error() error {
 	return nil
 }
 
-func (app *localClient) Flush(ctx context.Context) {
-	return
+func (app *localClient) Flush(ctx context.Context) error {
+	return nil
 }
 
-func (app *localClient) Echo(ctx context.Context, msg string) *types.ResponseEcho {
-	return &types.ResponseEcho{Message: msg}
+func (app *localClient) Echo(ctx context.Context, msg string) (*types.ResponseEcho, error) {
+	return &types.ResponseEcho{Message: msg}, nil
 }
 
-func (app *localClient) Info(ctx context.Context, req *types.RequestInfo) *types.ResponseInfo {
+func (app *localClient) Info(ctx context.Context, req *types.RequestInfo) (*types.ResponseInfo, error) {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	return app.Application.Info(req)
+	return app.Application.Info(req), nil
 }
 
 func (app *localClient) DeliverTx(ctx context.Context, req *local.RequestNativeDeliverTx,
-) *types.ResponseDeliverTx {
+) (*types.ResponseDeliverTx, error) {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	return app.Application.DeliverTx(req)
+	return app.Application.DeliverTx(req), nil
 }
 
 func (app *localClient) CheckTx(ctx context.Context, req *local.RequestNativeCheckTx,
-) *local.ResponseNativeCheckTx {
+) (*local.ResponseNativeCheckTx, error) {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	return app.Application.CheckTx(req)
+	return app.Application.CheckTx(req), nil
 }
 
 func (app *localClient) Query(ctx context.Context, req *types.RequestQuery,
-) *types.ResponseQuery {
+) (*types.ResponseQuery, error) {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	return app.Application.Query(req)
+	return app.Application.Query(req), nil
 }
 
-func (app *localClient) Commit(ctx context.Context) *types.ResponseCommit {
+func (app *localClient) Commit(ctx context.Context) (*types.ResponseCommit, error) {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	return app.Application.Commit()
+	return app.Application.Commit(), nil
 }
 
 func (app *localClient) InitLedger(ctx context.Context, req *types.RequestInitLedger,
-) *types.ResponseInitLedger {
+) (*types.ResponseInitLedger, error) {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	return app.Application.InitLedger(req)
+	return app.Application.InitLedger(req), nil
 }
 
 func (app *localClient) BeginBlock(ctx context.Context, req *local.RequestNativeBeginBlock,
-) *types.ResponseBeginBlock {
+) (*types.ResponseBeginBlock, error) {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	return app.Application.BeginBlock(req)
+	return app.Application.BeginBlock(req), nil
 }
 
 func (app *localClient) EndBlock(ctx context.Context, req *types.RequestEndBlock,
-) *local.ResponseNativeEndBlock {
+) (*local.ResponseNativeEndBlock, error) {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	return app.Application.EndBlock(req)
+	return app.Application.EndBlock(req), nil
 }
 
 func (app *localClient) ListSnapshots(ctx context.Context, req *types.RequestListSnapshots,
-) *types.ResponseListSnapshots {
+) (*types.ResponseListSnapshots, error) {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	return app.Application.ListSnapshots(req)
+	return app.Application.ListSnapshots(req), nil
 }
 
 func (app *localClient) OfferSnapshot(ctx context.Context, req *types.RequestOfferSnapshot,
-) *types.ResponseOfferSnapshot {
+) (*types.ResponseOfferSnapshot, error) {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	return app.Application.OfferSnapshot(req)
+	return app.Application.OfferSnapshot(req), nil
 }
 
 func (app *localClient) LoadSnapshotChunk(ctx context.Context, req *types.RequestLoadSnapshotChunk,
-) *types.ResponseLoadSnapshotChunk {
+) (*types.ResponseLoadSnapshotChunk, error) {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	return app.Application.LoadSnapshotChunk(req)
+	return app.Application.LoadSnapshotChunk(req), nil
 }
 
 func (app *localClient) ApplySnapshotChunk(ctx context.Context, req *types.RequestApplySnapshotChunk,
-) *types.ResponseApplySnapshotChunk {
+) (*types.ResponseApplySnapshotChunk, error) {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 
-	return app.Application.ApplySnapshotChunk(req)
+	return app.Application.ApplySnapshotChunk(req), nil
 }

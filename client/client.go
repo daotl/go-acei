@@ -79,20 +79,20 @@ type Client interface {
 type LocalClient interface {
 	Error() error
 
-	Flush(context.Context)
-	Echo(ctx context.Context, msg string) *types.ResponseEcho
-	Info(context.Context, *types.RequestInfo) *types.ResponseInfo
-	DeliverTx(context.Context, *local.RequestNativeDeliverTx) *types.ResponseDeliverTx
-	CheckTx(context.Context, *local.RequestNativeCheckTx) *local.ResponseNativeCheckTx
-	Query(context.Context, *types.RequestQuery) *types.ResponseQuery
-	Commit(context.Context) *types.ResponseCommit
-	InitLedger(context.Context, *types.RequestInitLedger) *types.ResponseInitLedger
-	BeginBlock(context.Context, *local.RequestNativeBeginBlock) *types.ResponseBeginBlock
-	EndBlock(context.Context, *types.RequestEndBlock) *local.ResponseNativeEndBlock
-	ListSnapshots(context.Context, *types.RequestListSnapshots) *types.ResponseListSnapshots
-	OfferSnapshot(context.Context, *types.RequestOfferSnapshot) *types.ResponseOfferSnapshot
-	LoadSnapshotChunk(context.Context, *types.RequestLoadSnapshotChunk) *types.ResponseLoadSnapshotChunk
-	ApplySnapshotChunk(context.Context, *types.RequestApplySnapshotChunk) *types.ResponseApplySnapshotChunk
+	Flush(context.Context) error
+	Echo(ctx context.Context, msg string) (*types.ResponseEcho, error)
+	Info(context.Context, *types.RequestInfo) (*types.ResponseInfo, error)
+	DeliverTx(context.Context, *local.RequestNativeDeliverTx) (*types.ResponseDeliverTx, error)
+	CheckTx(context.Context, *local.RequestNativeCheckTx) (*local.ResponseNativeCheckTx, error)
+	Query(context.Context, *types.RequestQuery) (*types.ResponseQuery, error)
+	Commit(context.Context) (*types.ResponseCommit, error)
+	InitLedger(context.Context, *types.RequestInitLedger) (*types.ResponseInitLedger, error)
+	BeginBlock(context.Context, *local.RequestNativeBeginBlock) (*types.ResponseBeginBlock, error)
+	EndBlock(context.Context, *types.RequestEndBlock) (*local.ResponseNativeEndBlock, error)
+	ListSnapshots(context.Context, *types.RequestListSnapshots) (*types.ResponseListSnapshots, error)
+	OfferSnapshot(context.Context, *types.RequestOfferSnapshot) (*types.ResponseOfferSnapshot, error)
+	LoadSnapshotChunk(context.Context, *types.RequestLoadSnapshotChunk) (*types.ResponseLoadSnapshotChunk, error)
+	ApplySnapshotChunk(context.Context, *types.RequestApplySnapshotChunk) (*types.ResponseApplySnapshotChunk, error)
 }
 
 //----------------------------------------
