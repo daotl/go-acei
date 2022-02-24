@@ -56,7 +56,6 @@ func (m *RequestNativeInitLedger) GetExtra() interface{} {
 }
 
 type RequestNativeBeginBlock struct {
-	Hash   model.BlockHash
 	Header *model.BlockHeaderExt
 	Extra  interface{}
 }
@@ -64,8 +63,8 @@ type RequestNativeBeginBlock struct {
 func (m *RequestNativeBeginBlock) Reset() { *m = RequestNativeBeginBlock{} }
 
 func (m *RequestNativeBeginBlock) GetHash() model.BlockHash {
-	if m != nil {
-		return m.Hash
+	if m != nil && m.Header != nil {
+		return m.Header.Hash
 	}
 	return nil
 }
