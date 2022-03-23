@@ -86,7 +86,7 @@ type LocalClient interface {
 	CheckTx(context.Context, *local.RequestNativeCheckTx) (*local.ResponseNativeCheckTx, error)
 	Query(context.Context, *types.RequestQuery) (*types.ResponseQuery, error)
 	Commit(context.Context) (*types.ResponseCommit, error)
-	InitLedger(context.Context, *types.RequestInitLedger) (*types.ResponseInitLedger, error)
+	InitLedger(context.Context, *local.RequestNativeInitLedger) (*local.ResponseNativeInitLedger, error)
 	BeginBlock(context.Context, *local.RequestNativeBeginBlock) (*types.ResponseBeginBlock, error)
 	EndBlock(context.Context, *types.RequestEndBlock) (*local.ResponseNativeEndBlock, error)
 	ListSnapshots(context.Context, *types.RequestListSnapshots) (*types.ResponseListSnapshots, error)

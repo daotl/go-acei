@@ -28,7 +28,7 @@ type grpcClient struct {
 	mtx   gsync.Mutex
 	addr  string
 	err   error
-	resCb func(*types.Request, *types.Response) // listens to all callbacks
+	resCb Callback // listens to all callbacks
 }
 
 var _ Client = (*grpcClient)(nil)

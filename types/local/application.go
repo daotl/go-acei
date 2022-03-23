@@ -17,11 +17,11 @@ type Application interface {
 	CheckTx(*RequestNativeCheckTx) *ResponseNativeCheckTx // Validate a tx for the mempool
 
 	// Consensus Connection
-	InitLedger(*t.RequestInitLedger) *t.ResponseInitLedger     // Initialize distributed ledger w/ validators/other info from the consensus engine
-	BeginBlock(*RequestNativeBeginBlock) *t.ResponseBeginBlock // Signals the beginning of a block
-	DeliverTx(*RequestNativeDeliverTx) *t.ResponseDeliverTx    // Deliver a tx for full processing
-	EndBlock(*t.RequestEndBlock) *ResponseNativeEndBlock       // Signals the end of a block, returns changes to the validator set
-	Commit() *t.ResponseCommit                                 // Commit the state and return the application Merkle root hash
+	InitLedger(*RequestNativeInitLedger) *ResponseNativeInitLedger // Initialize distributed ledger w/ validators/other info from the consensus engine
+	BeginBlock(*RequestNativeBeginBlock) *t.ResponseBeginBlock     // Signals the beginning of a block
+	DeliverTx(*RequestNativeDeliverTx) *t.ResponseDeliverTx        // Deliver a tx for full processing
+	EndBlock(*t.RequestEndBlock) *ResponseNativeEndBlock           // Signals the end of a block, returns changes to the validator set
+	Commit() *t.ResponseCommit                                     // Commit the state and return the application Merkle root hash
 
 	// State Sync Connection
 	ListSnapshots(*t.RequestListSnapshots) *t.ResponseListSnapshots                // List available snapshots
@@ -62,8 +62,8 @@ func (BaseApplication) Query(req *t.RequestQuery) *t.ResponseQuery {
 	return &t.ResponseQuery{Code: t.CodeTypeOK}
 }
 
-func (BaseApplication) InitLedger(req *t.RequestInitLedger) *t.ResponseInitLedger {
-	return &t.ResponseInitLedger{}
+func (BaseApplication) InitLedger(req *RequestNativeInitLedger) *ResponseNativeInitLedger {
+	return &ResponseNativeInitLedger{}
 }
 
 func (BaseApplication) BeginBlock(req *RequestNativeBeginBlock) *t.ResponseBeginBlock {

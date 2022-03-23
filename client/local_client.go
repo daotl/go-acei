@@ -20,7 +20,6 @@ type localClient struct {
 
 	mtx *gsync.Mutex
 	local.Application
-	Callback
 }
 
 var _ LocalClient = (*localClient)(nil)
@@ -104,8 +103,8 @@ func (app *localClient) Commit(ctx context.Context) (*types.ResponseCommit, erro
 	return app.Application.Commit(), nil
 }
 
-func (app *localClient) InitLedger(ctx context.Context, req *types.RequestInitLedger,
-) (*types.ResponseInitLedger, error) {
+func (app *localClient) InitLedger(ctx context.Context, req *local.RequestNativeInitLedger,
+) (*local.ResponseNativeInitLedger, error) {
 	app.mtx.Lock()
 	defer app.mtx.Unlock()
 

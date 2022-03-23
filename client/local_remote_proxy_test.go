@@ -3,13 +3,15 @@ package aceiclient_test
 import (
 	"context"
 	"fmt"
-	"github.com/daotl/go-acei/types/local"
-	modeltest "github.com/daotl/go-doubl/test"
 	"math/rand"
 	"testing"
 	"time"
 
+	"github.com/daotl/go-doubl/model"
+	dtest "github.com/daotl/go-doubl/test"
 	"github.com/daotl/go-log/v2"
+	"github.com/daotl/go-marsha"
+	cbor_refmt "github.com/daotl/go-marsha/cbor-refmt"
 	ssrv "github.com/daotl/guts/service/suture"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,9 +19,30 @@ import (
 	aceiclient "github.com/daotl/go-acei/client"
 	"github.com/daotl/go-acei/server"
 	"github.com/daotl/go-acei/types"
+	"github.com/daotl/go-acei/types/local"
 )
 
-func TestProxyClientBeginBlock(t *testing.T) {
+type mockExtra struct{}
+
+func (e mockExtra) Ptr() marsha.StructPtr {
+	return &e
+}
+
+func (e *mockExtra) Val() marsha.Struct {
+	return *e
+}
+
+func (*mockExtra) Size() uint64 {
+	return 0
+}
+
+func mockExtraCtor() model.ExtraPtr {
+	return &mockExtra{}
+}
+
+// var _ model.ExtraCtor[*mockExtra] = mockExtraCtor
+
+func TestBeginBlock(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -30,7 +53,7 @@ func TestProxyClientBeginBlock(t *testing.T) {
 
 	resp := make(chan error, 1)
 	go func() {
-		bx, err := modeltest.Util.ExtendBlockHeader(&modeltest.TestBlockHeader)
+		bx, err := dtest.Util.ExtendBlockHeader(&dtest.TestBlockHeader)
 		assert.NoError(t, err)
 		res, err := c.BeginBlock(ctx, &local.RequestNativeBeginBlock{Header: bx, Extra: nil})
 		assert.NoError(t, err)
@@ -49,7 +72,7 @@ func TestProxyClientBeginBlock(t *testing.T) {
 	}
 }
 
-func TestProxyClientCheckTx(t *testing.T) {
+func TestCheckTx(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -60,7 +83,7 @@ func TestProxyClientCheckTx(t *testing.T) {
 
 	resp := make(chan error, 1)
 	go func() {
-		txx := modeltest.GenRandomTransactionExt()
+		txx := dtest.GenRandomTransactionExt()
 		res, err := c.CheckTx(ctx, &local.RequestNativeCheckTx{
 			Tx:   txx,
 			Type: 0,
@@ -115,10 +138,10 @@ func setupGrpcClientServer(
 		}
 	})
 
-	proxyC, err := aceiclient.NewProxyClient(logger, nil, c)
+	p, err := aceiclient.NewLocalToRemoteProxy(logger, cbor_refmt.New(), c, mockExtraCtor, mockExtraCtor)
 	require.NoError(t, err)
 
-	return s, proxyC
+	return s, p
 }
 
 type baseApp struct {

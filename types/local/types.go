@@ -15,7 +15,7 @@ type RequestNativeInitLedger struct {
 	LedgerId      model.LedgerID
 	AppStateBytes []byte
 	InitialHeight uint64
-	Extra         interface{}
+	Extra         model.ExtraPtr
 }
 
 func (m *RequestNativeInitLedger) Reset() { *m = RequestNativeInitLedger{} }
@@ -48,7 +48,7 @@ func (m *RequestNativeInitLedger) GetInitialHeight() uint64 {
 	return 0
 }
 
-func (m *RequestNativeInitLedger) GetExtra() interface{} {
+func (m *RequestNativeInitLedger) GetExtra() model.ExtraPtr {
 	if m != nil {
 		return m.Extra
 	}
@@ -57,7 +57,7 @@ func (m *RequestNativeInitLedger) GetExtra() interface{} {
 
 type RequestNativeBeginBlock struct {
 	Header *model.BlockHeaderExt
-	Extra  interface{}
+	Extra  model.ExtraPtr
 }
 
 func (m *RequestNativeBeginBlock) Reset() { *m = RequestNativeBeginBlock{} }
@@ -76,7 +76,7 @@ func (m *RequestNativeBeginBlock) GetHeader() *model.BlockHeaderExt {
 	return &model.BlockHeaderExt{}
 }
 
-func (m *RequestNativeBeginBlock) GetExtra() interface{} {
+func (m *RequestNativeBeginBlock) GetExtra() model.ExtraPtr {
 	if m != nil {
 		return m.Extra
 	}
@@ -119,7 +119,7 @@ func (m *RequestNativeDeliverTx) GetTx() *model.TransactionExt {
 
 type ResponseNativeInitLedger struct {
 	AppHash []byte
-	Extra   interface{}
+	Extra   model.ExtraPtr
 }
 
 func (m *ResponseNativeInitLedger) Reset() { *m = ResponseNativeInitLedger{} }
@@ -131,7 +131,7 @@ func (m *ResponseNativeInitLedger) GetAppHash() []byte {
 	return nil
 }
 
-func (m *ResponseNativeInitLedger) GetExtra() interface{} {
+func (m *ResponseNativeInitLedger) GetExtra() model.ExtraPtr {
 	if m != nil {
 		return m.Extra
 	}
@@ -235,7 +235,7 @@ func (m *ResponseNativeCheckTx) GetMempoolError() error {
 
 type ResponseNativeEndBlock struct {
 	Events []types.Event
-	Extra  interface{}
+	Extra  model.ExtraPtr
 }
 
 func (m *ResponseNativeEndBlock) Reset() { *m = ResponseNativeEndBlock{} }
@@ -247,7 +247,7 @@ func (m *ResponseNativeEndBlock) GetEvents() []types.Event {
 	return nil
 }
 
-func (m *ResponseNativeEndBlock) GetExtra() interface{} {
+func (m *ResponseNativeEndBlock) GetExtra() model.ExtraPtr {
 	if m != nil {
 		return m.Extra
 	}
