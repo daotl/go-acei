@@ -31,8 +31,10 @@ var _ LocalClient = (*localToRemoteProxy)(nil)
 func NewLocalToRemoteProxy(logger log.StandardLogger, mrsh marsha.Marsha, remote Client, blockExtraCtor, txExtraCtor ExtraCtor,
 ) (*localToRemoteProxy, error) {
 	cli := &localToRemoteProxy{
-		mrsh:   mrsh,
-		client: remote,
+		mrsh:           mrsh,
+		client:         remote,
+		blockExtraCtor: blockExtraCtor,
+		txExtraCtor:    txExtraCtor,
 	}
 	var err error
 	cli.BaseService, err = ssrv.NewBaseService(cli.run, logger)
