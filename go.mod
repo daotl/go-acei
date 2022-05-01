@@ -1,12 +1,13 @@
 module github.com/daotl/go-acei
 
-go 1.18
+go 1.17
 
 require (
 	github.com/daotl/go-datastore v0.5.0
-	github.com/daotl/go-doubl v0.0.9
+	github.com/daotl/go-doubl v0.0.9-pre-go117
 	github.com/daotl/go-ds-leveldb v0.5.0
 	github.com/daotl/go-log/v2 v2.3.1
+	github.com/daotl/go-marsha v0.3.0
 	github.com/daotl/guts v0.0.0-20211209102048-f83c8ade78e8
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/protobuf v1.5.2
@@ -25,7 +26,6 @@ require (
 	github.com/crpt/go-crpt v0.5.1 // indirect
 	github.com/crpt/go-merkle v0.0.0-20211202024952-07ef5d0dcfc0 // indirect
 	github.com/daotl/cbor-gen v0.0.7 // indirect
-	github.com/daotl/go-marsha v0.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
 	github.com/golang/snappy v0.0.3 // indirect

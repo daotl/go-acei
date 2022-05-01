@@ -13,7 +13,7 @@ import (
 	"github.com/daotl/go-acei/types/local"
 )
 
-type ExtraCtor = model.ExtraCtor[model.ExtraPtr]
+type ExtraCtor = model.ExtraCtor
 
 // localToRemoteProxy is a LocalClient that proxies all requests to a remote Client.
 type localToRemoteProxy struct {
